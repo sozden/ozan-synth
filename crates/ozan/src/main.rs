@@ -22,7 +22,7 @@ fn main() -> eframe::Result {
             .with_title("OZAN Synth")
             .with_app_id("ozan")
             .with_icon(logo::icon())
-            .with_inner_size([1320.0, 960.0])
+            .with_inner_size([1420.0, 960.0])
             .with_min_inner_size([1200.0, 700.0]),
         ..Default::default()
     };

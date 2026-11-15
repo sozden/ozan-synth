@@ -23,7 +23,10 @@ pub use lfo::LfoWave;
 pub use modmatrix::{ModDest, ModSlot, ModSource};
 pub use wavetable::WavetableKind;
 pub use oscillator::Waveform;
-pub use patch::{ChorusParams, DelayParams, EffectsParams, FilterParams, LfoParams, OscParams, Patch, ReverbParams, UnisonParams, WheelParams};
+pub use patch::{
+    ChorusParams, DelayParams, EffectsParams, FilterParams, LfoParams, OscParams, Patch, PlayParams, ReverbParams, UnisonParams, VoiceMode,
+    WheelParams,
+};
 pub use envelope::AdsrParams;
 
 /// Frequency in Hz of a (fractional) MIDI note number; 69 = A4 = 440 Hz.

@@ -3,7 +3,7 @@
 use std::f32::consts::PI;
 
 use eframe::egui::{self, Color32, Pos2, Rect, Sense, Stroke, Vec2};
-use ozan_core::{FilterMode, LfoWave, Waveform};
+use ozan_core::{FilterMode, LfoWave, VoiceMode, Waveform};
 
 use crate::i18n::s;
 use crate::theme::{self, KnobStyle};
@@ -291,6 +291,30 @@ pub fn lfo_wave_selector(ui: &mut egui::Ui, wave: &mut LfoWave) -> bool {
             LfoWave::Saw => s().ramp,
             LfoWave::Square => s().square,
             LfoWave::SampleHold => s().sample_hold,
+        },
+    )
+}
+
+pub fn voice_mode_selector(ui: &mut egui::Ui, mode: &mut VoiceMode) -> bool {
+    fn label(m: VoiceMode) -> &'static str {
+        match m {
+            VoiceMode::Poly => s().poly,
+            VoiceMode::Mono => s().mono,
+            VoiceMode::Legato => s().legato,
+        }
+    }
+    choice_row(
+        ui,
+        mode,
+        &VoiceMode::ALL,
+        Vec2::new(54.0, 26.0),
+        |p, r, m, c| {
+            p.text(r.center(), egui::Align2::CENTER_CENTER, label(m), egui::FontId::proportional(12.0), c);
+        },
+        |m| match m {
+            VoiceMode::Poly => s().poly_hint,
+            VoiceMode::Mono => s().mono_hint,
+            VoiceMode::Legato => s().legato_hint,
         },
     )
 }

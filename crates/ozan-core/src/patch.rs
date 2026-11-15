@@ -160,6 +160,40 @@ impl Default for ReverbParams {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum VoiceMode {
+    /// Up to 16 notes at once.
+    #[default]
+    Poly,
+    /// One note at a time; every new key restarts the envelopes.
+    Mono,
+    /// One note at a time; keys played while another is held only change the
+    /// pitch (gliding if glide is on), envelopes run on.
+    Legato,
+}
+
+impl VoiceMode {
+    pub const ALL: [VoiceMode; 3] = [VoiceMode::Poly, VoiceMode::Mono, VoiceMode::Legato];
+}
+
+/// How notes are played.
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize), serde(default))]
+pub struct PlayParams {
+    pub mode: VoiceMode,
+    /// Portamento: time to slide most of the way to a new note, seconds (0..2).
+    pub glide: f32,
+    /// How much key velocity changes the level, 0 (not at all) .. 1 (fully).
+    pub velocity: f32,
+}
+
+impl Default for PlayParams {
+    fn default() -> Self {
+        Self { mode: VoiceMode::Poly, glide: 0.0, velocity: 1.0 }
+    }
+}
+
 /// Several detuned copies of each oscillator per note, spread across the stereo field.
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize), serde(default))]
@@ -197,6 +231,9 @@ pub struct Patch {
     pub wheel: WheelParams,
     /// Pitch-bend range in semitones each way (0..12).
     pub bend_range: f32,
+    pub play: PlayParams,
+    /// White noise level added to the oscillators, 0..1.
+    pub noise: f32,
     pub unison: UnisonParams,
     pub mods: [ModSlot; SLOTS],
     pub fx: EffectsParams,
@@ -218,6 +255,8 @@ impl Default for Patch {
             lfo: LfoParams::default(),
             wheel: WheelParams::default(),
             bend_range: 2.0,
+            play: PlayParams::default(),
+            noise: 0.0,
             unison: UnisonParams::default(),
             mods: [ModSlot::default(); SLOTS],
             fx: EffectsParams::default(),

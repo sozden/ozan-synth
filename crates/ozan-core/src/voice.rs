@@ -50,6 +50,9 @@ pub struct Voice {
     velocity: f32,
     /// Matrix "random" source, -1..1, new for each note.
     random: f32,
+    /// Sounding pitch (MIDI note number); glides towards `note`.
+    pitch: f32,
+    noise_seed: u32,
     osc: [[Oscillator; MAX_UNISON]; 2],
     /// Left and right; the right one runs only when the voice is not mono.
     filter: [Filter; 2],
@@ -77,8 +80,39 @@ impl Voice {
     pub fn level(&self) -> f32 {
         self.amp_env.level()
     }
+}
 
-    pub fn start(&mut self, note: u8, velocity: f32, order: u64, retrigger: bool, random: f32) {
+/// Arguments for [`Voice::start`].
+pub struct Start {
+    pub note: u8,
+    pub velocity: f32,
+    pub order: u64,
+    /// Restart the envelopes from where they are instead of from zero.
+    pub retrigger: bool,
+    pub random: f32,
+    /// Pitch to glide from; `None` starts on the note.
+    pub glide_from: Option<f32>,
+}
+
+impl Voice {
+    /// Pitch now (MIDI note number, without bend or modulation).
+    pub fn pitch(&self) -> f32 {
+        self.pitch
+    }
+
+    pub fn velocity(&self) -> f32 {
+        self.velocity
+    }
+
+    /// Legato: a new target note, envelopes untouched.
+    pub fn set_note(&mut self, note: u8) {
+        self.note = note;
+        self.held = true;
+        self.sustained = false;
+    }
+
+    pub fn start(&mut self, s: Start) {
+        let Start { note, velocity, order, retrigger, random, glide_from } = s;
         if !retrigger {
             self.amp_env.kill();
             self.filter_env.kill();
@@ -94,7 +128,9 @@ impl Voice {
             }
             self.random = random;
             self.ramp_from = None;
+            self.noise_seed = ((random + 1.0) * 1.0e6) as u32 | 1;
         }
+        self.pitch = glide_from.unwrap_or(note as f32);
         self.note = note;
         self.velocity = velocity;
         self.held = true;
@@ -161,7 +197,16 @@ impl Voice {
         let n = u.voices.clamp(1, MAX_UNISON as u8) as usize;
         let detune = (u.detune + at(ModDest::UnisonDetune) * 50.0).max(0.0);
         let pan_shift = at(ModDest::Pan);
-        let note = self.note as f32 + m.pitch + at(ModDest::Pitch) * 12.0;
+        // Glide: once per block, most of the way in `glide` seconds.
+        let glide = patch.play.glide;
+        let target = self.note as f32;
+        if glide <= 0.0 {
+            self.pitch = target;
+        } else {
+            let k = 1.0 - (-(left.len() as f32) / (glide * sample_rate / 3.0)).exp();
+            self.pitch += (target - self.pitch) * k;
+        }
+        let note = self.pitch + m.pitch + at(ModDest::Pitch) * 12.0;
         let osc_pitch = [at(ModDest::Osc1Pitch), at(ModDest::Osc2Pitch)];
         let levels = [
             (patch.osc[0].level + at(ModDest::Osc1Level)).clamp(0.0, 1.0),
@@ -197,7 +242,9 @@ impl Voice {
         let resonance = (f.resonance + at(ModDest::Resonance)).clamp(0.0, 1.0);
         let tracked = cutoff * (f.key_track * (self.note as f32 - 60.0) / 12.0 + m.cutoff_octaves + at(ModDest::Cutoff) * MATRIX_OCTAVES).exp2();
         let amount = f.env_amount * ENV_OCTAVES;
-        let gain = self.velocity * m.amp * (1.0 + at(ModDest::Volume)).clamp(0.0, 2.0);
+        let sens = patch.play.velocity.clamp(0.0, 1.0);
+        let gain = (1.0 - sens + sens * self.velocity) * m.amp * (1.0 + at(ModDest::Volume)).clamp(0.0, 2.0);
+        let noise = patch.noise.clamp(0.0, 1.0);
 
         let (start_pos, start_gain) = self.ramp_from.unwrap_or((positions, gain));
         self.ramp_from = Some((positions, gain));
@@ -228,8 +275,22 @@ impl Voice {
             }
             let fe = self.filter_env.next(&patch.filter_env, sample_rate);
             let (g, k) = Filter::coefficients(tracked * (amount * fe).exp2(), resonance, sample_rate);
-            let yl = self.filter[0].process_with(l * norm, f.mode, g, k);
-            let yr = if stereo { self.filter[1].process_with(r * norm, f.mode, g, k) } else { yl };
+            if noise > 0.0 {
+                // xorshift white noise, the same on both sides.
+                let mut x = self.noise_seed;
+                x ^= x << 13;
+                x ^= x >> 17;
+                x ^= x << 5;
+                self.noise_seed = x;
+                let n = ((x >> 8) as f32 / (1u32 << 23) as f32 - 1.0) * noise;
+                l = l * norm + n;
+                r = r * norm + n;
+            } else {
+                l *= norm;
+                r *= norm;
+            }
+            let yl = self.filter[0].process_with(l, f.mode, g, k);
+            let yr = if stereo { self.filter[1].process_with(r, f.mode, g, k) } else { yl };
             let ae = self.amp_env.next(&patch.amp_env, sample_rate);
             // Squared envelope sounds more even to the ear than a linear one.
             let e = ae * ae * gain;

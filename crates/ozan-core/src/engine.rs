@@ -3,7 +3,8 @@
 use crate::effects::Effects;
 use crate::lfo::Lfo;
 use crate::patch::{Patch, MOD_OCTAVES};
-use crate::voice::{Modulation, Voice};
+use crate::patch::VoiceMode;
+use crate::voice::{Modulation, Start, Voice};
 use crate::wavetable::WavetableBank;
 
 use std::sync::Arc;
@@ -62,6 +63,11 @@ pub struct Engine {
     lfo_value: f32,
     pedal: bool,
     counter: u64,
+    /// Last note played, where glide starts from.
+    last_note: Option<u8>,
+    /// Keys held in mono/legato, oldest first; the newest sounds.
+    stack: [u8; 16],
+    stack_len: usize,
     /// For the matrix's random source.
     seed: u32,
     /// Read-only tables shared by all voices (and by the interface for drawing).
@@ -92,6 +98,9 @@ impl Engine {
             lfo_value: 0.0,
             pedal: false,
             counter: 0,
+            last_note: None,
+            stack: [0; 16],
+            stack_len: 0,
             seed: 0x9E37_79B9,
             bank,
         }
@@ -133,6 +142,7 @@ impl Engine {
             Event::ClearEffects => self.effects.clear(),
             Event::AllNotesOff => {
                 self.pedal = false;
+                self.stack_len = 0;
                 for v in &mut self.voices {
                     v.kill();
                 }
@@ -143,9 +153,18 @@ impl Engine {
 
     fn note_on(&mut self, note: u8, velocity: f32) {
         self.counter += 1;
+        let gliding = self.patch.play.glide > 0.0;
+        let glide_from = self.last_note.filter(|_| gliding).map(|n| n as f32);
+        self.last_note = Some(note);
+        let random = self.random();
+        if self.patch.play.mode != VoiceMode::Poly {
+            self.mono_note_on(note, velocity, random);
+            return;
+        }
+        let start = |retrigger, glide_from| Start { note, velocity, order: self.counter, retrigger, random, glide_from };
         // The same note again reuses its voice (no doubled, phasing notes).
         if let Some(v) = self.voices.iter_mut().find(|v| v.is_active() && v.note == note) {
-            v.start(note, velocity, self.counter, true, 0.0);
+            v.start(start(true, None));
             return;
         }
         let index = self
@@ -154,8 +173,65 @@ impl Engine {
             .position(|v| !v.is_active())
             .or_else(|| self.steal())
             .unwrap_or(0);
-        let random = self.random();
-        self.voices[index].start(note, velocity, self.counter, false, random);
+        self.voices[index].start(start(false, glide_from));
+    }
+
+    /// Mono and legato play on voice 0 and keep a stack of held keys, so letting go
+    /// of the newest key goes back to the one still held.
+    fn mono_note_on(&mut self, note: u8, velocity: f32, random: f32) {
+        self.stack_remove(note);
+        if self.stack_len == self.stack.len() {
+            self.stack.copy_within(1.., 0);
+            self.stack_len -= 1;
+        }
+        self.stack[self.stack_len] = note;
+        self.stack_len += 1;
+
+        let legato = self.patch.play.mode == VoiceMode::Legato;
+        let gliding = self.patch.play.glide > 0.0;
+        let v = &mut self.voices[0];
+        let busy = v.is_active();
+        if legato && busy && (v.held || v.sustained) {
+            // Only the pitch moves (at once without glide); envelopes run on.
+            v.set_note(note);
+            return;
+        }
+        let glide_from = (busy && gliding).then(|| v.pitch());
+        v.start(Start { note, velocity, order: self.counter, retrigger: busy, random, glide_from });
+    }
+
+    fn stack_remove(&mut self, note: u8) {
+        if let Some(i) = self.stack[..self.stack_len].iter().position(|&n| n == note) {
+            self.stack.copy_within(i + 1..self.stack_len, i);
+            self.stack_len -= 1;
+        }
+    }
+
+    fn mono_note_off(&mut self, note: u8) {
+        self.stack_remove(note);
+        let legato = self.patch.play.mode == VoiceMode::Legato;
+        let gliding = self.patch.play.glide > 0.0;
+        let counter = self.counter;
+        let v = &mut self.voices[0];
+        if !v.held || v.note != note {
+            return;
+        }
+        if self.stack_len > 0 {
+            // Back to the newest key still held.
+            let back = self.stack[self.stack_len - 1];
+            self.last_note = Some(back);
+            if legato {
+                v.set_note(back);
+            } else {
+                let glide_from = gliding.then(|| v.pitch());
+                v.start(Start { note: back, velocity: v.velocity(), order: counter, retrigger: true, random: 0.0, glide_from });
+            }
+        } else if self.pedal {
+            v.held = false;
+            v.sustained = true;
+        } else {
+            v.release(&self.patch, self.sample_rate);
+        }
     }
 
     /// -1..1 (xorshift).
@@ -181,6 +257,10 @@ impl Engine {
     }
 
     fn note_off(&mut self, note: u8) {
+        if self.patch.play.mode != VoiceMode::Poly {
+            self.mono_note_off(note);
+            return;
+        }
         for v in self.voices.iter_mut().filter(|v| v.held && v.note == note) {
             if self.pedal {
                 v.held = false;
@@ -361,7 +441,7 @@ mod modulation_tests {
     use super::*;
     use crate::lfo::LfoWave;
     use crate::oscillator::Waveform;
-    use crate::patch::{LfoParams, OscParams};
+    use crate::patch::{LfoParams, OscParams, VoiceMode};
 
     const SR: f32 = 48_000.0;
 
@@ -510,6 +590,91 @@ mod modulation_tests {
         let square = sharpness(&l[4_800..19_200]);
         let sine = sharpness(&l[28_800..43_200]);
         assert!(square > 3.0 * sine, "{square} vs {sine}");
+    }
+
+    fn hz(x: &[f32]) -> f32 {
+        rising_crossings(x) as f32 * SR / x.len() as f32
+    }
+
+    /// Sine patch with a sustain level below the peak, so a restarted envelope shows.
+    fn mono_patch(mode: VoiceMode, glide: f32) -> Patch {
+        let mut p = sine_patch();
+        p.amp_env = crate::AdsrParams { attack: 0.005, decay: 0.05, sustain: 0.5, release: 0.05 };
+        p.play = crate::PlayParams { mode, glide, velocity: 1.0 };
+        p
+    }
+
+    #[test]
+    fn legato_keeps_envelope_and_returns_to_held_key() {
+        let mut e = Engine::new(SR);
+        e.handle(Event::Patch(mono_patch(VoiceMode::Legato, 0.0)));
+        e.handle(Event::NoteOn { note: 57, velocity: 100 }); // 220 Hz
+        render_lr(&mut e, 14_400);
+        let before = e.voices[0].level();
+        e.handle(Event::NoteOn { note: 69, velocity: 100 }); // 440 Hz, A3 still held
+        let (l, _) = render_lr(&mut e, 9_600);
+        assert!((hz(&l[2_400..]) - 440.0).abs() < 8.0, "{}", hz(&l[2_400..]));
+        assert!((e.voices[0].level() - before).abs() < 1e-3, "envelope moved");
+        assert_eq!(e.active_voices(), 1);
+        e.handle(Event::NoteOff { note: 69 });
+        let (l, _) = render_lr(&mut e, 9_600);
+        assert!((hz(&l[2_400..]) - 220.0).abs() < 8.0, "{}", hz(&l[2_400..]));
+        e.handle(Event::NoteOff { note: 57 });
+        render_lr(&mut e, 9_600);
+        assert_eq!(e.active_voices(), 0);
+    }
+
+    #[test]
+    fn mono_restarts_envelope_on_each_key() {
+        let mut e = Engine::new(SR);
+        e.handle(Event::Patch(mono_patch(VoiceMode::Mono, 0.0)));
+        e.handle(Event::NoteOn { note: 57, velocity: 100 });
+        render_lr(&mut e, 14_400);
+        e.handle(Event::NoteOn { note: 69, velocity: 100 });
+        render_lr(&mut e, 96); // into the new attack
+        assert!(e.voices[0].level() > 0.55, "{}", e.voices[0].level());
+        assert_eq!(e.active_voices(), 1);
+    }
+
+    #[test]
+    fn glide_slides_to_the_new_note() {
+        let mut e = Engine::new(SR);
+        let mut p = sine_patch();
+        p.play.glide = 0.3;
+        e.handle(Event::Patch(p));
+        e.handle(Event::NoteOn { note: 57, velocity: 100 });
+        render_lr(&mut e, 4_800);
+        e.handle(Event::NoteOff { note: 57 });
+        e.handle(Event::NoteOn { note: 69, velocity: 100 });
+        render_lr(&mut e, 960);
+        let v = e.voices.iter().find(|v| v.held && v.note == 69).unwrap();
+        assert!(v.pitch() < 63.0, "should still be low: {}", v.pitch());
+        render_lr(&mut e, 48_000);
+        let v = e.voices.iter().find(|v| v.held && v.note == 69).unwrap();
+        assert!((v.pitch() - 69.0).abs() < 0.01, "{}", v.pitch());
+    }
+
+    #[test]
+    fn velocity_sensitivity_and_noise() {
+        let level = |sens: f32, velocity: u8| {
+            let mut e = Engine::new(SR);
+            let mut p = sine_patch();
+            p.play.velocity = sens;
+            e.handle(Event::Patch(p));
+            e.handle(Event::NoteOn { note: 60, velocity });
+            rms(&render_lr(&mut e, 9_600).0)
+        };
+        assert!((level(0.0, 20) - level(0.0, 127)).abs() < 1e-6);
+        assert!(level(1.0, 127) > 4.0 * level(1.0, 20));
+
+        let mut e = Engine::new(SR);
+        let mut p = sine_patch();
+        p.osc[0].level = 0.0;
+        p.noise = 0.5;
+        e.handle(Event::Patch(p));
+        e.handle(Event::NoteOn { note: 60, velocity: 100 });
+        let (l, _) = render_lr(&mut e, 48_000);
+        assert!(rms(&l) > 0.01 && hz(&l) > 3_000.0, "{} {}", rms(&l), hz(&l));
     }
 
     #[test]

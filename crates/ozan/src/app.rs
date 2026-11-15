@@ -508,6 +508,15 @@ impl OzanApp {
                 });
             });
             theme::section(ui, s().mod_matrix, |ui| mod_matrix(ui, &mut p.mods));
+            theme::section(ui, s().play, |ui| {
+                knob::voice_mode_selector(ui, &mut p.play.mode);
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = 2.0;
+                    Knob::new(s().glide, &mut p.play.glide, 0.0, 2.0).default_value(0.0).format(seconds).show(ui);
+                    Knob::new(s().velocity, &mut p.play.velocity, 0.0, 1.0).default_value(1.0).format(percent).show(ui);
+                    Knob::new(s().noise, &mut p.noise, 0.0, 1.0).default_value(0.0).format(percent).show(ui);
+                });
+            });
         });
         ui.horizontal_top(|ui| {
             let fx = &mut p.fx;

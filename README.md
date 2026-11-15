@@ -10,12 +10,13 @@ The logo is drawn from geometry in `assets/make_logo.py`: the Z is a saw tooth, 
 
 *Türkçe açıklama aşağıda.*
 
-## Status — stage 5
+## Status — stage 5 + play modes
 
 - Classic subtractive voice: 2 oscillators → resonant filter → amplifier, 16 voices, stereo output
 - Band-limited sine, saw, square and triangle (PolyBLEP / PolyBLAMP — no aliasing whine on high notes)
 - Oscillator octave, semitone (osc 2), fine tune and level
 - Wavetable oscillator with 5 built-in tables (basic shapes, pulse width, harmonics, vowels, sync sweep), 32 frames each, one band-limited copy per octave so high notes do not alias
+- Poly, mono and legato play modes (mono keeps a stack of held keys), glide (portamento), velocity sensitivity, white noise source
 - Unison: up to 7 detuned copies per oscillator, spread across the stereo field at constant loudness
 - Modulation matrix: 6 slots, sources LFO, filter/amp envelope, velocity, note, mod wheel, aftertouch, random-per-note; destinations pitch, wavetable position, levels, cutoff, resonance, volume, pan, unison detune
 - Zero-delay-feedback state-variable filter: LP 12 dB, LP 24 dB, band-pass, high-pass; cutoff, resonance, envelope amount (±7 octaves), key tracking
@@ -24,7 +25,7 @@ The logo is drawn from geometry in `assets/make_logo.py`: the Z is a saw tooth, 
 - LFO (sine, triangle, ramp, square, sample & hold) for vibrato, filter wobble and tremolo
 - Mod wheel and aftertouch: extra vibrato and cutoff; adjustable pitch-bend range
 - Effects: stereo chorus, delay (ping-pong, darkening repeats, tape-like glide when the time is turned), reverb (8-line feedback delay network: size, decay, damping, pre-delay); each fades in and out when switched
-- Presets: 17 factory sounds, save/delete your own (JSON in `%APPDATA%\Ozan\presets`), step with ◀ ▶ or MIDI program change
+- Presets: 20 factory sounds, save/delete your own (JSON in `%APPDATA%\Ozan\presets`), step with ◀ ▶ or MIDI program change
 - USB MIDI input (all channels): notes, velocity, sustain pedal, pitch bend, mod wheel, aftertouch, program change, all-notes-off
 - MIDI keyboards are found and connected automatically
 - Panel with knobs (drag up/down, Shift for fine, double-click for default, mouse wheel), envelope graphs, analogue VU meter
@@ -85,7 +86,7 @@ USB MIDI klavye, bilgisayar klavyesi ya da fareyle çalınır.
 kare ve üçgen dalgalar; rezonanslı filtre (LP12, LP24, BP, HP), filtre ve amfi için ayrı
 ADSR zarfları. LFO (vibrato, filtre, tremolo), mod tekeri ve aftertouch. Stereo chorus,
 delay (ping-pong) ve reverb efektleri. Wavetable osilatör (5 tablo), 7 kopyaya kadar unison
-ve 6 slotlu mod matrisi. 17 fabrika
+ve 6 slotlu mod matrisi. Poly/mono/legato, glide, velocity hassasiyeti ve gürültü. 20 fabrika
 preset'i; kendi preset'lerini kaydedip silebilir, MIDI program change ile seçebilirsin.
 USB MIDI otomatik bağlanır; Stüdyo (70'ler) ve Gece temaları arasında seçim yapılır.
 

@@ -10,7 +10,10 @@ use crate::lfo::LfoWave;
 use crate::modmatrix::{ModDest, ModSlot, ModSource, SLOTS};
 use crate::oscillator::Waveform;
 use crate::wavetable::WavetableKind;
-use crate::patch::{ChorusParams, DelayParams, EffectsParams, FilterParams, LfoParams, OscParams, Patch, ReverbParams, UnisonParams, WheelParams};
+use crate::patch::{
+    ChorusParams, DelayParams, EffectsParams, FilterParams, LfoParams, OscParams, Patch, PlayParams, ReverbParams, UnisonParams, VoiceMode,
+    WheelParams,
+};
 
 fn osc(wave: Waveform, octave: i8, semitones: i8, fine: f32, level: f32) -> OscParams {
     OscParams { wave, octave, semitones, fine, level, ..OscParams::default() }
@@ -70,6 +73,10 @@ fn mods(slots: &[ModSlot]) -> [ModSlot; SLOTS] {
     let mut all = [ModSlot::default(); SLOTS];
     all[..slots.len()].copy_from_slice(slots);
     all
+}
+
+fn play(mode: VoiceMode, glide: f32, velocity: f32) -> PlayParams {
+    PlayParams { mode, glide, velocity }
 }
 
 /// Built-in presets, in the order they appear in the list.
@@ -273,6 +280,45 @@ pub fn factory() -> Vec<(&'static str, Patch)> {
                 ]),
                 fx: fx(None, None, reverb(0.5, 1.8, 0.4, 10.0, 0.2)),
                 volume: 0.93,
+                ..d
+            },
+        ),
+        (
+            "Glide Lead",
+            Patch {
+                osc: [osc(Saw, 0, 0, 0.0, 0.8), osc(Square, -1, 0, 5.0, 0.5)],
+                play: play(VoiceMode::Legato, 0.12, 0.8),
+                filter: filter(Lp24, 1800.0, 0.35, 0.35, 0.5),
+                filter_env: adsr(0.002, 0.5, 0.4, 0.3),
+                amp_env: adsr(0.005, 0.2, 1.0, 0.2),
+                wheel: WheelParams { vibrato: 0.6, cutoff: 0.2 },
+                fx: fx(None, delay(300.0, 0.3, 3500.0, true, 0.2), reverb(0.5, 1.8, 0.4, 10.0, 0.2)),
+                volume: 0.55,
+                ..d
+            },
+        ),
+        (
+            "Mono Bass",
+            Patch {
+                osc: [osc(Saw, -1, 0, 0.0, 0.8), osc(Square, -2, 0, 0.0, 0.6)],
+                play: play(VoiceMode::Mono, 0.05, 0.6),
+                filter: filter(Lp24, 250.0, 0.4, 0.55, 0.3),
+                filter_env: adsr(0.001, 0.25, 0.1, 0.1),
+                amp_env: adsr(0.002, 0.2, 1.0, 0.1),
+                volume: 0.53,
+                ..d
+            },
+        ),
+        (
+            "Wind",
+            Patch {
+                osc: [OFF, OFF],
+                noise: 1.0,
+                filter: filter(Lp12, 1400.0, 0.6, 0.0, 0.5),
+                amp_env: adsr(0.6, 1.0, 1.0, 2.0),
+                lfo: lfo(LfoWave::Triangle, 0.2, 0.0, 0.4, 0.0),
+                fx: fx(chorus(0.3, 0.6, 0.5), None, reverb(0.9, 5.0, 0.4, 30.0, 0.5)),
+                volume: 1.0,
                 ..d
             },
         ),
