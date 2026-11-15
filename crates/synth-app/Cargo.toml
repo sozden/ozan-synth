@@ -1,0 +1,18 @@
+[package]
+name = "synth-app"
+description = "Standalone synthesizer: sound card output, USB MIDI input and the panel"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "synth"
+path = "src/main.rs"
+
+[dependencies]
+synth-core = { path = "../synth-core" }
+cpal = "0.18.2"
+eframe = "0.35.0"
+midir = "0.11.1"
+rtrb = "0.4.1"
