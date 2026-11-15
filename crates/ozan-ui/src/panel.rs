@@ -36,40 +36,40 @@ pub fn panel(ui: &mut egui::Ui, p: &mut Patch, bank: &WavetableBank, m: &Meters)
     ui.horizontal_top(|ui| {
         for (i, osc) in p.osc.iter_mut().enumerate() {
             let title = if i == 0 { s().osc1 } else { s().osc2 };
-            theme::section(ui, title, |ui| oscillator(ui, osc, i == 1, bank));
+            theme::section_k(ui, if i == 0 { "osc1" } else { "osc2" }, title, |ui| oscillator(ui, osc, i == 1, bank));
         }
-        theme::section(ui, s().filter, |ui| {
+        theme::section_k(ui, "filter", s().filter, |ui| {
             knob::filter_mode_selector(ui, &mut p.filter.mode);
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 2.0;
                 let f = &mut p.filter;
-                Knob::new(s().cutoff, &mut f.cutoff, 20.0, 20_000.0).log().default_value(800.0).format(hertz).show(ui);
-                Knob::new(s().resonance, &mut f.resonance, 0.0, 1.0).default_value(0.3).format(percent).show(ui);
-                Knob::new(s().env_amount, &mut f.env_amount, -1.0, 1.0).bipolar().default_value(0.4).format(signed_percent).show(ui);
-                Knob::new(s().key_track, &mut f.key_track, 0.0, 1.0).default_value(0.5).format(percent).show(ui);
-            Knob::new(s().drive, &mut f.drive, 0.0, 1.0).default_value(0.0).format(percent).show(ui);
+                Knob::keyed("cutoff", s().cutoff, &mut f.cutoff, 20.0, 20_000.0).log().default_value(800.0).format(hertz).show(ui);
+                Knob::keyed("resonance", s().resonance, &mut f.resonance, 0.0, 1.0).default_value(0.3).format(percent).show(ui);
+                Knob::keyed("env_amount", s().env_amount, &mut f.env_amount, -1.0, 1.0).bipolar().default_value(0.4).format(signed_percent).show(ui);
+                Knob::keyed("key_track", s().key_track, &mut f.key_track, 0.0, 1.0).default_value(0.5).format(percent).show(ui);
+            Knob::keyed("drive", s().drive, &mut f.drive, 0.0, 1.0).default_value(0.0).format(percent).show(ui);
             });
         });
-        theme::section(ui, s().unison, |ui| {
+        theme::section_k(ui, "unison", s().unison, |ui| {
             ui.add_space(30.0);
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 2.0;
                 let u = &mut p.unison;
                 let mut copies = u.voices as f32;
-                if Knob::new(s().unison_voices, &mut copies, 1.0, 7.0).integer().default_value(1.0).format(count).show(ui) {
+                if Knob::keyed("unison_voices", s().unison_voices, &mut copies, 1.0, 7.0).integer().default_value(1.0).format(count).show(ui) {
                     u.voices = copies as u8;
                 }
-                Knob::new(s().detune, &mut u.detune, 0.0, 100.0).default_value(20.0).format(cents_plain).show(ui);
-                Knob::new(s().spread, &mut u.spread, 0.0, 1.0).default_value(0.6).format(percent).show(ui);
+                Knob::keyed("detune", s().detune, &mut u.detune, 0.0, 100.0).default_value(20.0).format(cents_plain).show(ui);
+                Knob::keyed("spread", s().spread, &mut u.spread, 0.0, 1.0).default_value(0.6).format(percent).show(ui);
             });
         });
     });
     ui.horizontal_top(|ui| {
-        theme::section(ui, s().filter_env, |ui| envelope(ui, &mut p.filter_env));
-        theme::section(ui, s().amp_env, |ui| envelope(ui, &mut p.amp_env));
-        theme::section(ui, s().output, |ui| {
+        theme::section_k(ui, "filter_env", s().filter_env, |ui| envelope(ui, &mut p.filter_env));
+        theme::section_k(ui, "amp_env", s().amp_env, |ui| envelope(ui, &mut p.amp_env));
+        theme::section_k(ui, "output", s().output, |ui| {
             ui.horizontal(|ui| {
-                Knob::new(s().volume, &mut p.volume, 0.0, 1.0).default_value(0.7).format(percent).show(ui);
+                Knob::keyed("volume", s().volume, &mut p.volume, 0.0, 1.0).default_value(0.7).format(percent).show(ui);
                 widgets::vu_meter(ui, m.vu, m.peak, Vec2::new(136.0, 92.0));
                 ui.vertical(|ui| {
                     ui.label(RichText::new(s().voices).size(11.0).color(theme::t().muted));
@@ -83,7 +83,7 @@ pub fn panel(ui: &mut egui::Ui, p: &mut Patch, bank: &WavetableBank, m: &Meters)
         });
     });
     ui.horizontal_top(|ui| {
-        theme::section(ui, s().lfo, |ui| {
+        theme::section_k(ui, "lfo", s().lfo, |ui| {
             ui.horizontal(|ui| {
                 knob::lfo_wave_selector(ui, &mut p.lfo.wave);
                 ui.add_space(6.0);
@@ -93,13 +93,13 @@ pub fn panel(ui: &mut egui::Ui, p: &mut Patch, bank: &WavetableBank, m: &Meters)
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 2.0;
                 let l = &mut p.lfo;
-                Knob::new(s().rate, &mut l.rate, 0.05, 20.0).log().default_value(5.0).format(rate).show(ui);
-                Knob::new(s().vibrato, &mut l.pitch, 0.0, 12.0).default_value(0.0).format(semitones).show(ui);
-                Knob::new(s().filter_knob, &mut l.cutoff, -1.0, 1.0).bipolar().default_value(0.0).format(signed_percent).show(ui);
-                Knob::new(s().tremolo, &mut l.amp, 0.0, 1.0).default_value(0.0).format(percent).show(ui);
+                Knob::keyed("rate", s().rate, &mut l.rate, 0.05, 20.0).log().default_value(5.0).format(rate).show(ui);
+                Knob::keyed("vibrato", s().vibrato, &mut l.pitch, 0.0, 12.0).default_value(0.0).format(semitones).show(ui);
+                Knob::keyed("filter_knob", s().filter_knob, &mut l.cutoff, -1.0, 1.0).bipolar().default_value(0.0).format(signed_percent).show(ui);
+                Knob::keyed("tremolo", s().tremolo, &mut l.amp, 0.0, 1.0).default_value(0.0).format(percent).show(ui);
             });
         });
-        theme::section(ui, s().wheel_section, |ui| {
+        theme::section_k(ui, "wheel_section", s().wheel_section, |ui| {
             ui.horizontal(|ui| {
                 widgets::mini_bar(ui, s().wheel, wheel);
                 ui.add_space(8.0);
@@ -107,24 +107,24 @@ pub fn panel(ui: &mut egui::Ui, p: &mut Patch, bank: &WavetableBank, m: &Meters)
             });
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 2.0;
-                Knob::new(s().vibrato, &mut p.wheel.vibrato, 0.0, 2.0).default_value(0.5).format(semitones).show(ui);
-                Knob::new(s().filter_knob, &mut p.wheel.cutoff, -1.0, 1.0).bipolar().default_value(0.0).format(signed_percent).show(ui);
-                Knob::new(s().bend, &mut p.bend_range, 0.0, 12.0).integer().default_value(2.0).format(bend).show(ui);
+                Knob::keyed("vibrato", s().vibrato, &mut p.wheel.vibrato, 0.0, 2.0).default_value(0.5).format(semitones).show(ui);
+                Knob::keyed("filter_knob", s().filter_knob, &mut p.wheel.cutoff, -1.0, 1.0).bipolar().default_value(0.0).format(signed_percent).show(ui);
+                Knob::keyed("bend", s().bend, &mut p.bend_range, 0.0, 12.0).integer().default_value(2.0).format(bend).show(ui);
             });
         });
-        theme::section(ui, s().mod_matrix, |ui| mod_matrix(ui, &mut p.mods));
-        theme::section(ui, s().play, |ui| {
+        theme::section_k(ui, "mod_matrix", s().mod_matrix, |ui| mod_matrix(ui, &mut p.mods));
+        theme::section_k(ui, "play", s().play, |ui| {
             knob::voice_mode_selector(ui, &mut p.play.mode);
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 2.0;
-                Knob::new(s().glide, &mut p.play.glide, 0.0, 2.0).default_value(0.0).format(seconds).show(ui);
-                Knob::new(s().velocity, &mut p.play.velocity, 0.0, 1.0).default_value(1.0).format(percent).show(ui);
-                Knob::new(s().noise, &mut p.noise, 0.0, 1.0).default_value(0.0).format(percent).show(ui);
+                Knob::keyed("glide", s().glide, &mut p.play.glide, 0.0, 2.0).default_value(0.0).format(seconds).show(ui);
+                Knob::keyed("velocity", s().velocity, &mut p.play.velocity, 0.0, 1.0).default_value(1.0).format(percent).show(ui);
+                Knob::keyed("noise", s().noise, &mut p.noise, 0.0, 1.0).default_value(0.0).format(percent).show(ui);
             });
         });
     });
     ui.horizontal_top(|ui| {
-        theme::section(ui, s().lfo2, |ui| {
+        theme::section_k(ui, "lfo2", s().lfo2, |ui| {
             ui.horizontal(|ui| {
                 knob::lfo_wave_selector(ui, &mut p.lfo2.wave);
                 ui.add_space(6.0);
@@ -133,25 +133,25 @@ pub fn panel(ui: &mut egui::Ui, p: &mut Patch, bank: &WavetableBank, m: &Meters)
             });
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 2.0;
-                Knob::new(s().rate, &mut p.lfo2.rate, 0.02, 20.0).log().default_value(0.5).format(rate).show(ui);
+                Knob::keyed("rate", s().rate, &mut p.lfo2.rate, 0.02, 20.0).log().default_value(0.5).format(rate).show(ui);
             });
         });
-        theme::section(ui, s().mod_env, |ui| envelope(ui, &mut p.mod_env));
-        theme::section(ui, s().scope, |ui| crate::scope::section(ui, m.scope, m.sample_rate, Vec2::new(420.0, 96.0)));
+        theme::section_k(ui, "mod_env", s().mod_env, |ui| envelope(ui, &mut p.mod_env));
+        theme::section_k(ui, "scope", s().scope, |ui| crate::scope::section(ui, m.scope, m.sample_rate, Vec2::new(420.0, 96.0)));
     });
     ui.horizontal_top(|ui| {
         let fx = &mut p.fx;
-        theme::section(ui, s().chorus, |ui| {
+        theme::section_k(ui, "chorus", s().chorus, |ui| {
             widgets::toggle(ui, &mut fx.chorus.on, s().on);
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 2.0;
                 let c = &mut fx.chorus;
-                Knob::new(s().rate, &mut c.rate, 0.1, 5.0).log().default_value(0.6).format(rate).show(ui);
-                Knob::new(s().depth, &mut c.depth, 0.0, 1.0).default_value(0.5).format(percent).show(ui);
-                Knob::new(s().mix, &mut c.mix, 0.0, 1.0).default_value(0.7).format(percent).show(ui);
+                Knob::keyed("rate", s().rate, &mut c.rate, 0.1, 5.0).log().default_value(0.6).format(rate).show(ui);
+                Knob::keyed("depth", s().depth, &mut c.depth, 0.0, 1.0).default_value(0.5).format(percent).show(ui);
+                Knob::keyed("mix", s().mix, &mut c.mix, 0.0, 1.0).default_value(0.7).format(percent).show(ui);
             });
         });
-        theme::section(ui, s().delay, |ui| {
+        theme::section_k(ui, "delay", s().delay, |ui| {
             ui.horizontal(|ui| {
                 widgets::toggle(ui, &mut fx.delay.on, s().on);
                 ui.add_space(12.0);
@@ -160,25 +160,25 @@ pub fn panel(ui: &mut egui::Ui, p: &mut Patch, bank: &WavetableBank, m: &Meters)
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 2.0;
                 let d = &mut fx.delay;
-                Knob::new(s().time, &mut d.time_ms, 20.0, 2000.0).log().default_value(375.0).format(millis).show(ui);
-                Knob::new(s().feedback, &mut d.feedback, 0.0, 0.95).default_value(0.35).format(percent).show(ui);
-                Knob::new(s().tone, &mut d.tone, 500.0, 16_000.0).log().default_value(5000.0).format(hertz).show(ui);
-                Knob::new(s().mix, &mut d.mix, 0.0, 1.0).default_value(0.3).format(percent).show(ui);
+                Knob::keyed("time", s().time, &mut d.time_ms, 20.0, 2000.0).log().default_value(375.0).format(millis).show(ui);
+                Knob::keyed("feedback", s().feedback, &mut d.feedback, 0.0, 0.95).default_value(0.35).format(percent).show(ui);
+                Knob::keyed("tone", s().tone, &mut d.tone, 500.0, 16_000.0).log().default_value(5000.0).format(hertz).show(ui);
+                Knob::keyed("mix", s().mix, &mut d.mix, 0.0, 1.0).default_value(0.3).format(percent).show(ui);
             });
         });
-        theme::section(ui, s().reverb, |ui| {
+        theme::section_k(ui, "reverb", s().reverb, |ui| {
             widgets::toggle(ui, &mut fx.reverb.on, s().on);
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 2.0;
                 let r = &mut fx.reverb;
-                Knob::new(s().size, &mut r.size, 0.0, 1.0).default_value(0.5).format(percent).show(ui);
-                Knob::new(s().reverb_decay, &mut r.decay, 0.3, 10.0).log().default_value(1.8).format(seconds).show(ui);
-                Knob::new(s().damping, &mut r.damping, 0.0, 1.0).default_value(0.4).format(percent).show(ui);
-                Knob::new(s().predelay, &mut r.predelay_ms, 0.0, 100.0).default_value(10.0).format(millis).show(ui);
-                Knob::new(s().mix, &mut r.mix, 0.0, 1.0).default_value(0.3).format(percent).show(ui);
+                Knob::keyed("size", s().size, &mut r.size, 0.0, 1.0).default_value(0.5).format(percent).show(ui);
+                Knob::keyed("reverb_decay", s().reverb_decay, &mut r.decay, 0.3, 10.0).log().default_value(1.8).format(seconds).show(ui);
+                Knob::keyed("damping", s().damping, &mut r.damping, 0.0, 1.0).default_value(0.4).format(percent).show(ui);
+                Knob::keyed("predelay", s().predelay, &mut r.predelay_ms, 0.0, 100.0).default_value(10.0).format(millis).show(ui);
+                Knob::keyed("mix", s().mix, &mut r.mix, 0.0, 1.0).default_value(0.3).format(percent).show(ui);
             });
         });
-        theme::section(ui, s().arp, |ui| arpeggiator(ui, &mut p.arp));
+        theme::section_k(ui, "arp", s().arp, |ui| arpeggiator(ui, &mut p.arp));
     });
 }
 
@@ -239,19 +239,19 @@ pub fn oscillator(ui: &mut egui::Ui, osc: &mut OscParams, semitones: bool, bank:
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 2.0;
         let mut octave = osc.octave as f32;
-        if Knob::new(s().octave, &mut octave, -3.0, 3.0).integer().default_value(0.0).bipolar().format(signed_int).show(ui) {
+        if Knob::keyed("octave", s().octave, &mut octave, -3.0, 3.0).integer().default_value(0.0).bipolar().format(signed_int).show(ui) {
             osc.octave = octave as i8;
         }
         if semitones {
             let mut semi = osc.semitones as f32;
-            if Knob::new(s().semitone, &mut semi, -12.0, 12.0).integer().default_value(0.0).bipolar().format(signed_int).show(ui) {
+            if Knob::keyed("semitone", s().semitone, &mut semi, -12.0, 12.0).integer().default_value(0.0).bipolar().format(signed_int).show(ui) {
                 osc.semitones = semi as i8;
             }
         }
-        Knob::new(s().fine, &mut osc.fine, -50.0, 50.0).default_value(0.0).bipolar().format(cents).show(ui);
-        Knob::new(s().level, &mut osc.level, 0.0, 1.0).format(percent).show(ui);
+        Knob::keyed("fine", s().fine, &mut osc.fine, -50.0, 50.0).default_value(0.0).bipolar().format(cents).show(ui);
+        Knob::keyed("level", s().level, &mut osc.level, 0.0, 1.0).format(percent).show(ui);
         if osc.wave == Waveform::Wavetable {
-            Knob::new(s().position, &mut osc.position, 0.0, 1.0).default_value(0.0).format(percent).show(ui);
+            Knob::keyed("position", s().position, &mut osc.position, 0.0, 1.0).default_value(0.0).format(percent).show(ui);
         }
     });
 }
@@ -317,11 +317,11 @@ pub fn arpeggiator(ui: &mut egui::Ui, a: &mut ArpParams) {
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 2.0;
         let mut octaves = a.octaves as f32;
-        if Knob::new(s().octaves, &mut octaves, 1.0, 4.0).integer().default_value(1.0).format(count).show(ui) {
+        if Knob::keyed("octaves", s().octaves, &mut octaves, 1.0, 4.0).integer().default_value(1.0).format(count).show(ui) {
             a.octaves = octaves as u8;
         }
-        Knob::new(s().gate, &mut a.gate, 0.05, 1.0).default_value(0.5).format(percent).show(ui);
-        Knob::new(s().tempo, &mut a.bpm, 40.0, 240.0).default_value(120.0).format(bpm).show(ui);
+        Knob::keyed("gate", s().gate, &mut a.gate, 0.05, 1.0).default_value(0.5).format(percent).show(ui);
+        Knob::keyed("tempo", s().tempo, &mut a.bpm, 40.0, 240.0).default_value(120.0).format(bpm).show(ui);
     });
 }
 
@@ -333,10 +333,10 @@ fn bpm(v: f32) -> String {
 pub fn envelope(ui: &mut egui::Ui, env: &mut AdsrParams) {
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 2.0;
-        Knob::new(s().attack, &mut env.attack, 0.001, 5.0).log().format(seconds).show(ui);
-        Knob::new(s().decay, &mut env.decay, 0.005, 5.0).log().format(seconds).show(ui);
-        Knob::new(s().sustain, &mut env.sustain, 0.0, 1.0).format(percent).show(ui);
-        Knob::new(s().release, &mut env.release, 0.005, 8.0).log().format(seconds).show(ui);
+        Knob::keyed("attack", s().attack, &mut env.attack, 0.001, 5.0).log().format(seconds).show(ui);
+        Knob::keyed("decay", s().decay, &mut env.decay, 0.005, 5.0).log().format(seconds).show(ui);
+        Knob::keyed("sustain", s().sustain, &mut env.sustain, 0.0, 1.0).format(percent).show(ui);
+        Knob::keyed("release", s().release, &mut env.release, 0.005, 8.0).log().format(seconds).show(ui);
         ui.add_space(8.0);
         widgets::envelope_graph(ui, env.attack, env.decay, env.sustain, env.release, Vec2::new(118.0, 92.0));
     });

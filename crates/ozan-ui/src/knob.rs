@@ -5,7 +5,8 @@ use std::f32::consts::PI;
 use egui::{self, Color32, Pos2, Rect, Sense, Stroke, Vec2};
 use ozan_core::{ArpMode, FilterMode, LfoWave, VoiceMode, Waveform};
 
-use crate::i18n::s;
+use crate::i18n::{fill, s};
+use crate::learn;
 use crate::theme::{self, KnobStyle};
 
 /// How a knob maps its 0..1 travel to a value.
@@ -30,6 +31,8 @@ pub struct Knob<'a> {
     /// The arc starts from the middle (for amounts that go both ways).
     bipolar: bool,
     format: fn(f32) -> String,
+    /// Name for MIDI learn (with the section, see [`learn`]); unkeyed knobs cannot learn.
+    key: Option<&'a str>,
 }
 
 fn plain(v: f32) -> String {
@@ -39,7 +42,12 @@ fn plain(v: f32) -> String {
 impl<'a> Knob<'a> {
     pub fn new(label: &'a str, value: &'a mut f32, min: f32, max: f32) -> Self {
         let default = *value;
-        Self { label, value, min, max, default, curve: Curve::Linear, integer: false, bipolar: false, format: plain }
+        Self { label, value, min, max, default, curve: Curve::Linear, integer: false, bipolar: false, format: plain, key: None }
+    }
+
+    /// A knob that can be bound to a MIDI controller under `key`.
+    pub fn keyed(key: &'a str, label: &'a str, value: &'a mut f32, min: f32, max: f32) -> Self {
+        Self { key: Some(key), ..Self::new(label, value, min, max) }
     }
 
     pub fn default_value(mut self, v: f32) -> Self {
@@ -89,6 +97,10 @@ impl<'a> Knob<'a> {
         let (rect, response) = ui.allocate_exact_size(Vec2::new(60.0, 92.0), Sense::click_and_drag());
         let id = response.id;
         let before = *self.value;
+        let learn_key = self.key.filter(|_| learn::is_enabled()).map(learn::full_key);
+        if let Some(v) = learn_key.as_deref().and_then(learn::take) {
+            *self.value = self.norm_to_value(v);
+        }
         if response.dragged() {
             // The unrounded position is kept while dragging, or an integer knob
             // would never reach the next step with small moves.
@@ -164,6 +176,42 @@ impl<'a> Knob<'a> {
             egui::FontId::monospace(11.0),
             if active { th.accent } else { th.muted },
         );
+        if let Some(key) = learn_key {
+            let armed = learn::is_armed(&key);
+            let bound = learn::binding(&key);
+            if armed {
+                // Waiting for a controller: a pulsing ring.
+                let t = ui.input(|i| i.time) as f32;
+                let a = 0.45 + 0.45 * (t * 6.0).sin();
+                painter.circle_stroke(center, radius + 4.0, Stroke::new(2.0, th.accent.gamma_multiply(a)));
+                ui.ctx().request_repaint();
+            }
+            if let Some(cc) = bound {
+                painter.text(Pos2::new(rect.right() - 2.0, rect.top() + 2.0), egui::Align2::RIGHT_TOP, cc.to_string(), egui::FontId::monospace(9.0), th.accent);
+            }
+            let response = match bound {
+                Some(cc) => response.on_hover_text(fill(s().midi_bound, &[&cc])),
+                None => response,
+            };
+            response.context_menu(|ui| {
+                if armed {
+                    ui.label(s().midi_learn_wait);
+                    if ui.button(s().midi_learn_cancel).clicked() {
+                        learn::disarm();
+                        ui.close_menu();
+                    }
+                } else if ui.button(s().midi_learn).clicked() {
+                    learn::arm(&key);
+                    ui.close_menu();
+                }
+                if let Some(cc) = bound {
+                    if ui.button(fill(s().midi_forget, &[&cc])).clicked() {
+                        learn::forget(&key);
+                        ui.close_menu();
+                    }
+                }
+            });
+        }
         *self.value != before
     }
 }

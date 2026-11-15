@@ -37,6 +37,10 @@ pub struct OzanApp {
 
     midi_ports: Vec<String>,
     midi: Option<MidiConnection>,
+    /// Controller changes from the MIDI input, for MIDI learn.
+    controllers: Option<rtrb::Consumer<(u8, u8)>>,
+    /// MIDI learn bindings as last written to the settings.
+    saved_map: String,
     midi_error: Option<String>,
     /// The user chose "none"; do not reconnect on our own.
     midi_off: bool,
@@ -64,6 +68,7 @@ pub struct OzanApp {
 impl OzanApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         let settings = Settings::load();
+        ozan_ui::learn::enable(settings.get("midi_map"));
         i18n::select(settings.get("lang").and_then(Lang::from_code).unwrap_or(Lang::En));
         let theme = settings.get("theme").and_then(theme::index_of).unwrap_or(0);
         theme::select(&cc.egui_ctx, theme);
@@ -77,6 +82,8 @@ impl OzanApp {
             audio,
             midi_ports: Vec::new(),
             midi: None,
+            controllers: None,
+            saved_map: ozan_ui::learn::save(),
             midi_error: None,
             midi_off: false,
             last_scan: Instant::now() - RESCAN,
@@ -115,9 +122,11 @@ impl OzanApp {
 
     fn connect_midi(&mut self, name: &str) {
         self.midi = None; // close first: Windows allows one user per input
-        match midi_in::connect(name, self.events.clone(), self.status.clone()) {
+        let (tx, rx) = rtrb::RingBuffer::new(256);
+        match midi_in::connect(name, self.events.clone(), self.status.clone(), tx) {
             Ok(c) => {
                 self.midi = Some(c);
+                self.controllers = Some(rx);
                 self.midi_error = None;
                 self.midi_off = false;
             }
@@ -344,7 +353,17 @@ impl eframe::App for OzanApp {
                     wheel: self.status.wheel(),
                     aftertouch: self.status.aftertouch(),
                 };
+                if let Some(rx) = &mut self.controllers {
+                    while let Ok((cc, value)) = rx.pop() {
+                        ozan_ui::learn::feed(cc, value);
+                    }
+                }
                 ozan_ui::panel::panel(ui, &mut self.patch, &self.bank, &meters);
+                let map = ozan_ui::learn::save();
+                if map != self.saved_map {
+                    self.settings.set("midi_map", &map);
+                    self.saved_map = map;
+                }
                 if self.patch != before {
                     self.events.send(Event::Patch(self.patch));
                 }

@@ -30,6 +30,7 @@ The logo is drawn from geometry in `assets/make_logo.py`: the Z is a saw tooth, 
 - Presets: 25 factory sounds, save/delete your own (JSON in `%APPDATA%\Ozan\presets`), step with ◀ ▶ or MIDI program change
 - USB MIDI input (all channels): notes, velocity, sustain pedal, pitch bend, mod wheel, aftertouch, program change, all-notes-off
 - MIDI keyboards are found and connected automatically
+- MIDI learn (standalone program): right-click a knob, choose *MIDI learn*, turn a knob on your controller; bindings are remembered
 - Panel with knobs (drag up/down, Shift for fine, double-click for default, mouse wheel), envelope graphs, analogue VU meter, and a live scope: triggered waveform or log-frequency spectrum of the output
 - English or Turkish interface, and two looks, chosen in the header and remembered: **Studio** (1970s style — wooden end cheeks, skirted knobs, cream lettering) and **Night** (dark cards with screws)
 - On-screen keyboard (C2–C7) that also shows the notes coming from MIDI
@@ -110,7 +111,7 @@ USB MIDI klavye, bilgisayar klavyesi ya da fareyle çalınır.
 kare ve üçgen dalgalar; rezonanslı filtre (LP12, LP24, BP, HP), filtre ve amfi için ayrı
 ADSR zarfları. LFO (vibrato, filtre, tremolo), mod tekeri ve aftertouch. Stereo chorus,
 delay (ping-pong) ve reverb efektleri. Wavetable osilatör (5 tablo), 7 kopyaya kadar unison
-ve 6 slotlu mod matrisi. Poly/mono/legato, glide, velocity hassasiyeti, gürültü, arpejiyatör (DAW temposunu izler), ikinci LFO ve mod zarfı; çıkışın canlı dalga biçimi ve spektrumu; filtrede drive ve notch. 25 fabrika
+ve 6 slotlu mod matrisi. Poly/mono/legato, glide, velocity hassasiyeti, gürültü, arpejiyatör (DAW temposunu izler), ikinci LFO ve mod zarfı; çıkışın canlı dalga biçimi ve spektrumu; filtrede drive ve notch; MIDI learn (knob'a sağ tıkla, kontrolcünde bir düğme çevir). 25 fabrika
 preset'i; kendi preset'lerini kaydedip silebilir, MIDI program change ile seçebilirsin.
 USB MIDI otomatik bağlanır; Stüdyo (70'ler) ve Gece temaları arasında seçim yapılır.
 Ayrıca CLAP/VST3 eklentisi olarak DAW içinde çalışır; kendi preset'lerin uygulama ile

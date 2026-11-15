@@ -211,6 +211,11 @@ pub fn section<R>(ui: &mut egui::Ui, title: &str, add: impl FnOnce(&mut egui::Ui
     }
 }
 
+/// A section whose knobs learn MIDI under `key` (see [`crate::learn`]).
+pub fn section_k<R>(ui: &mut egui::Ui, key: &'static str, title: &str, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
+    section(ui, title, |ui| crate::learn::in_section(key, || add(ui)))
+}
+
 /// Letter-spaced capitals, as printed on old front panels.
 fn spaced(s: &str) -> String {
     s.chars().flat_map(|c| [c, '\u{2009}']).collect::<String>().trim_end().to_string()

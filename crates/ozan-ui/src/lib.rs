@@ -3,6 +3,7 @@
 
 pub mod i18n;
 pub mod knob;
+pub mod learn;
 pub mod logo;
 pub mod panel;
 pub mod preset_bar;

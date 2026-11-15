@@ -25,7 +25,8 @@ pub struct MidiConnection {
     pub name: String,
 }
 
-pub fn connect(name: &str, events: Events, status: Arc<Status>) -> Result<MidiConnection, String> {
+/// Controller changes (CC number, value) go to `controllers` too, for MIDI learn.
+pub fn connect(name: &str, events: Events, status: Arc<Status>, mut controllers: rtrb::Producer<(u8, u8)>) -> Result<MidiConnection, String> {
     let mut input = MidiInput::new(CLIENT).map_err(|e| e.to_string())?;
     input.ignore(Ignore::All);
     let ports = input.ports();
@@ -39,6 +40,11 @@ pub fn connect(name: &str, events: Events, status: Arc<Status>) -> Result<MidiCo
             "ozan-in",
             move |_time, message, _| {
                 status.midi_received();
+                if let [st, cc, value, ..] = *message {
+                    if st & 0xF0 == 0xB0 {
+                        let _ = controllers.push((cc & 0x7F, value & 0x7F));
+                    }
+                }
                 match ozan_core::midi::parse(message) {
                     // Choosing a preset is the interface's job.
                     Some(Event::ProgramChange(p)) => status.request_program(p),

@@ -294,6 +294,12 @@ pub struct Strings {
     pub drive: &'static str,
     pub notch: &'static str,
     pub dst_drive: &'static str,
+    // MIDI learn
+    pub midi_learn: &'static str,
+    pub midi_learn_wait: &'static str,
+    pub midi_learn_cancel: &'static str,
+    pub midi_forget: &'static str,
+    pub midi_bound: &'static str,
     // Errors from devices and files
     pub no_audio_device: &'static str,
     pub sample_format: &'static str,
@@ -464,6 +470,11 @@ pub static EN: Strings = Strings {
     drive: "Drive",
     notch: "Notch: cuts around the cutoff",
     dst_drive: "Drive",
+    midi_learn: "MIDI learn",
+    midi_learn_wait: "Turn a knob on your controller…",
+    midi_learn_cancel: "Cancel learning",
+    midi_forget: "Forget CC {}",
+    midi_bound: "Controlled by CC {}",
     no_audio_device: "no sound output device",
     sample_format: "unsupported sample format {}",
     midi_gone: "“{}” is no longer connected",
@@ -632,6 +643,11 @@ pub static TR: Strings = Strings {
     drive: "Drive",
     notch: "Çentik: cutoff çevresini oyar",
     dst_drive: "Drive",
+    midi_learn: "MIDI learn",
+    midi_learn_wait: "Kontrolcünde bir düğme çevir…",
+    midi_learn_cancel: "Öğrenmeyi iptal et",
+    midi_forget: "CC {} bağını kaldır",
+    midi_bound: "CC {} ile kontrol ediliyor",
     no_audio_device: "ses çıkış aygıtı bulunamadı",
     sample_format: "desteklenmeyen örnek biçimi {}",
     midi_gone: "“{}” artık bağlı değil",
@@ -655,6 +671,8 @@ mod tests {
             (EN.sample_format, TR.sample_format),
             (EN.midi_gone, TR.midi_gone),
             (EN.midi_busy, TR.midi_busy),
+            (EN.midi_forget, TR.midi_forget),
+            (EN.midi_bound, TR.midi_bound),
         ] {
             assert_eq!(en.matches("{}").count(), tr.matches("{}").count(), "{en} / {tr}");
         }
