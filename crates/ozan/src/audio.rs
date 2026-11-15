@@ -75,7 +75,7 @@ fn build<T: SizedSample + FromSample<f32>>(
                         [] => {}
                     }
                 }
-                status.report_audio(engine.active_voices(), peak, engine.held_notes(), engine.lfo_value());
+                status.report_audio(engine.active_voices(), peak, engine.held_notes(), [engine.lfo_value(), engine.lfo2_value()]);
             },
             |e| eprintln!("audio: {e}"),
             None,

@@ -24,6 +24,7 @@ pub struct Meters {
     peak: AtomicU32,
     voices: AtomicU32,
     lfo: AtomicU32,
+    lfo2: AtomicU32,
     wheel: AtomicU32,
     aftertouch: AtomicU32,
 }
@@ -291,6 +292,7 @@ impl Plugin for OzanPlugin {
         m.peak.fetch_max(peak.to_bits(), Ordering::Relaxed);
         Meters::store(&m.voices, engine.active_voices() as f32);
         Meters::store(&m.lfo, engine.lfo_value());
+        Meters::store(&m.lfo2, engine.lfo2_value());
         Meters::store(&m.wheel, self.wheel);
         Meters::store(&m.aftertouch, self.aftertouch);
         // Reverb and echo tails ring on after the last note.

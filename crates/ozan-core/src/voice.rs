@@ -27,13 +27,14 @@ pub struct Modulation {
     pub amp: f32,
     /// Matrix sources that are the same for every voice.
     pub lfo: f32,
+    pub lfo2: f32,
     pub wheel: f32,
     pub aftertouch: f32,
 }
 
 impl Default for Modulation {
     fn default() -> Self {
-        Self { pitch: 0.0, cutoff_octaves: 0.0, amp: 1.0, lfo: 0.0, wheel: 0.0, aftertouch: 0.0 }
+        Self { pitch: 0.0, cutoff_octaves: 0.0, amp: 1.0, lfo: 0.0, lfo2: 0.0, wheel: 0.0, aftertouch: 0.0 }
     }
 }
 
@@ -58,6 +59,7 @@ pub struct Voice {
     filter: [Filter; 2],
     filter_env: Adsr,
     amp_env: Adsr,
+    mod_env: Adsr,
     /// Wavetable positions and gain at the end of the previous block: the matrix
     /// changes them once per block, and jumping there would click, so each block
     /// ramps from these to its new values. `None` right after a note starts.
@@ -116,6 +118,7 @@ impl Voice {
         if !retrigger {
             self.amp_env.kill();
             self.filter_env.kill();
+            self.mod_env.kill();
             for f in &mut self.filter {
                 f.reset();
             }
@@ -138,6 +141,7 @@ impl Voice {
         self.started = order;
         self.amp_env.gate_on();
         self.filter_env.gate_on();
+        self.mod_env.gate_on();
     }
 
     pub fn release(&mut self, patch: &Patch, sample_rate: f32) {
@@ -145,6 +149,7 @@ impl Voice {
         self.sustained = false;
         self.amp_env.gate_off(&patch.amp_env, sample_rate);
         self.filter_env.gate_off(&patch.filter_env, sample_rate);
+        self.mod_env.gate_off(&patch.mod_env, sample_rate);
     }
 
     pub fn kill(&mut self) {
@@ -152,6 +157,7 @@ impl Voice {
         self.sustained = false;
         self.amp_env.kill();
         self.filter_env.kill();
+        self.mod_env.kill();
     }
 
     /// Sum of the matrix slots for each destination.
@@ -161,6 +167,8 @@ impl Voice {
             let v = match slot.source {
                 ModSource::Off => continue,
                 ModSource::Lfo => m.lfo,
+                ModSource::Lfo2 => m.lfo2,
+                ModSource::ModEnv => self.mod_env.level(),
                 ModSource::FilterEnv => self.filter_env.level(),
                 ModSource::AmpEnv => self.amp_env.level(),
                 ModSource::Velocity => self.velocity,
@@ -273,6 +281,7 @@ impl Voice {
                 l += x * gl[i];
                 r += x * gr[i];
             }
+            self.mod_env.next(&patch.mod_env, sample_rate);
             let fe = self.filter_env.next(&patch.filter_env, sample_rate);
             let (g, k) = Filter::coefficients(tracked * (amount * fe).exp2(), resonance, sample_rate);
             if noise > 0.0 {

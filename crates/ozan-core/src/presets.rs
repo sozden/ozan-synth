@@ -354,6 +354,25 @@ pub fn factory() -> Vec<(&'static str, Patch)> {
             },
         ),
         (
+            "Evolving Pad",
+            Patch {
+                osc: [wt(WavetableKind::Harmonics, 0.0, 0, 0.0, 0.9), wt(WavetableKind::Vowels, 0.3, 0, 7.0, 0.6)],
+                unison: unison(3, 15.0, 0.5),
+                filter: filter(Lp12, 3000.0, 0.1, 0.0, 0.3),
+                amp_env: adsr(1.0, 1.0, 0.9, 3.0),
+                mod_env: adsr(3.0, 2.0, 0.6, 3.0),
+                lfo2: lfo(LfoWave::Sine, 0.13, 0.0, 0.0, 0.0),
+                mods: mods(&[
+                    ModSlot::new(ModSource::ModEnv, ModDest::Osc1Position, 0.9),
+                    ModSlot::new(ModSource::Lfo2, ModDest::Pan, 0.6),
+                    ModSlot::new(ModSource::Lfo2, ModDest::Osc2Position, 0.3),
+                ]),
+                fx: fx(chorus(0.3, 0.5, 0.5), None, reverb(0.85, 5.0, 0.45, 25.0, 0.45)),
+                volume: 0.94,
+                ..d
+            },
+        ),
+        (
             "Pure Sine",
             Patch {
                 osc: [osc(Sine, 0, 0, 0.0, 1.0), OFF],

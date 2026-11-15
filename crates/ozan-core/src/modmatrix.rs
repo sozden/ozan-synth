@@ -11,10 +11,14 @@ pub enum ModSource {
     Off,
     /// -1..1.
     Lfo,
+    /// -1..1.
+    Lfo2,
     /// 0..1.
     FilterEnv,
     /// 0..1.
     AmpEnv,
+    /// 0..1.
+    ModEnv,
     /// 0..1.
     Velocity,
     /// -1 (C-1) .. 0 (C4) .. 1, by note number.
@@ -28,11 +32,13 @@ pub enum ModSource {
 }
 
 impl ModSource {
-    pub const ALL: [ModSource; 9] = [
+    pub const ALL: [ModSource; 11] = [
         ModSource::Off,
         ModSource::Lfo,
+        ModSource::Lfo2,
         ModSource::FilterEnv,
         ModSource::AmpEnv,
+        ModSource::ModEnv,
         ModSource::Velocity,
         ModSource::Note,
         ModSource::Wheel,

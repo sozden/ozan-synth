@@ -229,6 +229,11 @@ pub struct Patch {
     pub filter_env: AdsrParams,
     pub amp_env: AdsrParams,
     pub lfo: LfoParams,
+    /// Second LFO; reaches its destinations through the matrix only (wave and
+    /// rate are used).
+    pub lfo2: LfoParams,
+    /// Third envelope, a matrix source.
+    pub mod_env: AdsrParams,
     pub wheel: WheelParams,
     /// Pitch-bend range in semitones each way (0..12).
     pub bend_range: f32,
@@ -255,6 +260,8 @@ impl Default for Patch {
             filter_env: AdsrParams { attack: 0.005, decay: 0.5, sustain: 0.3, release: 0.5 },
             amp_env: AdsrParams { attack: 0.005, decay: 0.3, sustain: 0.8, release: 0.4 },
             lfo: LfoParams::default(),
+            lfo2: LfoParams { wave: LfoWave::Triangle, rate: 0.5, ..LfoParams::default() },
+            mod_env: AdsrParams { attack: 0.5, decay: 0.5, sustain: 0.0, release: 0.5 },
             wheel: WheelParams::default(),
             bend_range: 2.0,
             play: PlayParams::default(),

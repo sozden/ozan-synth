@@ -63,6 +63,8 @@ pub struct Engine {
     wheel: f32,
     aftertouch: f32,
     lfo: Lfo,
+    lfo2: Lfo,
+    lfo2_value: f32,
     /// Smoothed LFO value, used for modulation and shown by the interface.
     lfo_value: f32,
     pedal: bool,
@@ -101,6 +103,8 @@ impl Engine {
             wheel: 0.0,
             aftertouch: 0.0,
             lfo: Lfo::default(),
+            lfo2: Lfo::default(),
+            lfo2_value: 0.0,
             lfo_value: 0.0,
             pedal: false,
             counter: 0,
@@ -302,6 +306,11 @@ impl Engine {
         }
     }
 
+    /// Second LFO's value of the last block, -1..1.
+    pub fn lfo2_value(&self) -> f32 {
+        self.lfo2_value
+    }
+
     /// LFO value of the last block, -1..1.
     pub fn lfo_value(&self) -> f32 {
         self.lfo_value
@@ -316,6 +325,8 @@ impl Engine {
         let k = 1.0 - (-(samples as f32) / (LFO_SLEW * self.sample_rate)).exp();
         self.lfo_value += (raw - self.lfo_value) * k;
         let lfo = self.lfo_value;
+        let raw2 = self.lfo2.advance(p.lfo2.wave, p.lfo2.rate, samples as f32 / self.sample_rate);
+        self.lfo2_value += (raw2 - self.lfo2_value) * k;
         let wheel = self.wheel.max(self.aftertouch);
         Modulation {
             pitch: self.bend * p.bend_range + lfo * (p.lfo.pitch + wheel * p.wheel.vibrato),
@@ -323,6 +334,7 @@ impl Engine {
             // Tremolo dips the level from full down to (1 - depth).
             amp: 1.0 - p.lfo.amp * 0.5 * (1.0 - lfo),
             lfo,
+            lfo2: self.lfo2_value,
             wheel: self.wheel,
             aftertouch: self.aftertouch,
         }
@@ -799,6 +811,33 @@ mod modulation_tests {
         assert_eq!(e.held_notes(), 0);
         e.handle(Event::NoteOn { note: 72, velocity: 100 });
         assert_eq!(e.held_notes(), 1u128 << 72);
+    }
+
+    #[test]
+    fn lfo2_and_mod_envelope_drive_the_matrix() {
+        use crate::{ModDest, ModSlot, ModSource};
+        // LFO 2, square at 1 Hz, ±1 octave on pitch: 440 Hz, then 110 Hz.
+        let mut e = Engine::new(SR);
+        let mut p = sine_patch();
+        p.lfo2 = LfoParams { wave: LfoWave::Square, rate: 1.0, ..LfoParams::default() };
+        p.mods[0] = ModSlot::new(ModSource::Lfo2, ModDest::Pitch, 1.0);
+        e.handle(Event::Patch(p));
+        e.handle(Event::NoteOn { note: 57, velocity: 100 });
+        let (l, _) = render_lr(&mut e, 48_000);
+        assert!((hz(&l[4_800..19_200]) - 440.0).abs() < 10.0, "{}", hz(&l[4_800..19_200]));
+        assert!((hz(&l[28_800..43_200]) - 110.0).abs() < 10.0, "{}", hz(&l[28_800..43_200]));
+
+        // Mod envelope, 0.5 s attack, an octave on pitch: rises from 220 to 440 Hz.
+        let mut e = Engine::new(SR);
+        let mut p = sine_patch();
+        p.mod_env = crate::AdsrParams { attack: 0.5, decay: 0.1, sustain: 1.0, release: 0.1 };
+        p.mods[0] = ModSlot::new(ModSource::ModEnv, ModDest::Pitch, 1.0);
+        e.handle(Event::Patch(p));
+        e.handle(Event::NoteOn { note: 57, velocity: 100 });
+        let (l, _) = render_lr(&mut e, 48_000);
+        let start = hz(&l[..2_400]);
+        let end = hz(&l[38_400..]);
+        assert!(start < 260.0 && (end - 440.0).abs() < 10.0, "{start} → {end}");
     }
 
     #[test]

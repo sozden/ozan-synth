@@ -17,8 +17,9 @@ pub struct Meters {
     pub vu: f32,
     pub peak: f32,
     pub voices: u32,
-    /// LFO value, -1..1.
+    /// LFO values, -1..1.
     pub lfo: f32,
+    pub lfo2: f32,
     pub wheel: f32,
     pub aftertouch: f32,
 }
@@ -117,6 +118,21 @@ pub fn panel(ui: &mut egui::Ui, p: &mut Patch, bank: &WavetableBank, m: &Meters)
                 Knob::new(s().noise, &mut p.noise, 0.0, 1.0).default_value(0.0).format(percent).show(ui);
             });
         });
+    });
+    ui.horizontal_top(|ui| {
+        theme::section(ui, s().lfo2, |ui| {
+            ui.horizontal(|ui| {
+                knob::lfo_wave_selector(ui, &mut p.lfo2.wave);
+                ui.add_space(6.0);
+                let th = theme::t();
+                widgets::led(ui, th.accent.gamma_multiply(0.12 + 0.88 * (0.5 + 0.5 * m.lfo2))).on_hover_text(s().lfo2_hint);
+            });
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 2.0;
+                Knob::new(s().rate, &mut p.lfo2.rate, 0.02, 20.0).log().default_value(0.5).format(rate).show(ui);
+            });
+        });
+        theme::section(ui, s().mod_env, |ui| envelope(ui, &mut p.mod_env));
     });
     ui.horizontal_top(|ui| {
         let fx = &mut p.fx;

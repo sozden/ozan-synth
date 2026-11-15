@@ -14,7 +14,7 @@ use ozan_ui::theme;
 use crate::{Meters, OzanParams};
 
 pub const WIDTH: u32 = 1460;
-pub const HEIGHT: u32 = 820;
+pub const HEIGHT: u32 = 950;
 
 /// Per-window state: needle ballistics.
 #[derive(Default)]
@@ -50,6 +50,7 @@ pub fn create(params: Arc<OzanParams>, meters: Arc<Meters>, bank: Arc<WavetableB
                         peak: window.peak,
                         voices: Meters::load(&meters.voices) as u32,
                         lfo: Meters::load(&meters.lfo),
+                        lfo2: Meters::load(&meters.lfo2),
                         wheel: Meters::load(&meters.wheel),
                         aftertouch: Meters::load(&meters.aftertouch),
                     };

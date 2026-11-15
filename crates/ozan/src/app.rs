@@ -477,6 +477,7 @@ impl eframe::App for OzanApp {
                     peak: self.meter,
                     voices: self.status.voices(),
                     lfo: self.status.lfo(),
+                    lfo2: self.status.lfo2(),
                     wheel: self.status.wheel(),
                     aftertouch: self.status.aftertouch(),
                 };

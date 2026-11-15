@@ -37,13 +37,15 @@ pub struct Status {
     wheel: AtomicU32,
     aftertouch: AtomicU32,
     lfo: AtomicU32,
+    lfo2: AtomicU32,
     /// Program change waiting for the interface, plus one (0 = none).
     program: AtomicU32,
 }
 
 impl Status {
-    pub fn report_audio(&self, voices: usize, peak: f32, held: u128, lfo: f32) {
-        self.lfo.store(lfo.to_bits(), Ordering::Relaxed);
+    pub fn report_audio(&self, voices: usize, peak: f32, held: u128, lfo: [f32; 2]) {
+        self.lfo.store(lfo[0].to_bits(), Ordering::Relaxed);
+        self.lfo2.store(lfo[1].to_bits(), Ordering::Relaxed);
         self.voices.store(voices as u32, Ordering::Relaxed);
         self.peak.fetch_max(peak.abs().to_bits(), Ordering::Relaxed);
         self.held[0].store(held as u64, Ordering::Relaxed);
@@ -89,6 +91,10 @@ impl Status {
 
     pub fn lfo(&self) -> f32 {
         f32::from_bits(self.lfo.load(Ordering::Relaxed))
+    }
+
+    pub fn lfo2(&self) -> f32 {
+        f32::from_bits(self.lfo2.load(Ordering::Relaxed))
     }
 
     pub fn request_program(&self, program: u8) {
