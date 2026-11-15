@@ -1,6 +1,6 @@
 //! Polyphonic engine: voice allocation, events and mixing.
 
-use crate::envelope::AdsrParams;
+use crate::patch::Patch;
 use crate::voice::Voice;
 
 pub const MAX_VOICES: usize = 16;
@@ -11,16 +11,9 @@ const BEND_RANGE: f32 = 2.0;
 /// Mix level per voice, leaves headroom for chords.
 const VOICE_GAIN: f32 = 0.2;
 
-/// Sound settings changed from the user interface.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Param {
-    /// Output level 0..1.
-    Volume(f32),
-    Attack(f32),
-    Decay(f32),
-    SustainLevel(f32),
-    Release(f32),
-}
+/// Voices are rendered in blocks of this many samples; smoothed settings (volume,
+/// cutoff) step once per block, about 0.7 ms.
+const BLOCK: usize = 32;
 
 /// Something that happens to the engine, from MIDI or from the user interface.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -31,16 +24,17 @@ pub enum Event {
     /// -1..1, scaled to ±[`BEND_RANGE`] semitones.
     PitchBend(f32),
     AllNotesOff,
-    Param(Param),
+    /// New sound settings.
+    Patch(Patch),
 }
 
 pub struct Engine {
     sample_rate: f32,
     voices: [Voice; MAX_VOICES],
-    adsr: AdsrParams,
-    volume: f32,
-    /// Smoothed volume, so moving the knob does not crackle.
+    patch: Patch,
+    /// Smoothed volume and cutoff (log2 Hz), so turning a knob does not crackle.
     gain: f32,
+    log_cutoff: f32,
     bend: f32,
     pedal: bool,
     counter: u64,
@@ -48,12 +42,13 @@ pub struct Engine {
 
 impl Engine {
     pub fn new(sample_rate: f32) -> Self {
+        let patch = Patch::default();
         Self {
             sample_rate,
             voices: Default::default(),
-            adsr: AdsrParams::default(),
-            volume: 0.7,
-            gain: 0.7,
+            gain: patch.volume,
+            log_cutoff: patch.filter.cutoff.log2(),
+            patch,
             bend: 0.0,
             pedal: false,
             counter: 0,
@@ -85,7 +80,7 @@ impl Engine {
                 self.pedal = down;
                 if !down {
                     for v in self.voices.iter_mut().filter(|v| v.sustained) {
-                        v.release(&self.adsr, self.sample_rate);
+                        v.release(&self.patch, self.sample_rate);
                     }
                 }
             }
@@ -96,13 +91,7 @@ impl Engine {
                     v.kill();
                 }
             }
-            Event::Param(p) => match p {
-                Param::Volume(v) => self.volume = v.clamp(0.0, 1.0),
-                Param::Attack(t) => self.adsr.attack = t.max(0.0),
-                Param::Decay(t) => self.adsr.decay = t.max(0.0),
-                Param::SustainLevel(l) => self.adsr.sustain = l.clamp(0.0, 1.0),
-                Param::Release(t) => self.adsr.release = t.max(0.0),
-            },
+            Event::Patch(p) => self.patch = p,
         }
     }
 
@@ -142,7 +131,7 @@ impl Engine {
                 v.held = false;
                 v.sustained = true;
             } else {
-                v.release(&self.adsr, self.sample_rate);
+                v.release(&self.patch, self.sample_rate);
             }
         }
     }
@@ -150,14 +139,21 @@ impl Engine {
     /// Fills `out` (mono) with the next samples.
     pub fn render(&mut self, out: &mut [f32]) {
         out.fill(0.0);
-        for v in &mut self.voices {
-            v.render_add(out, &self.adsr, self.bend, self.sample_rate);
-        }
-        // About 5 ms smoothing at 48 kHz.
-        let k = 1.0 - (-1.0 / (0.005 * self.sample_rate)).exp();
-        for s in out {
-            self.gain += (self.volume - self.gain) * k;
-            *s *= VOICE_GAIN * self.gain;
+        // About 10 ms smoothing.
+        let k = 1.0 - (-(BLOCK as f32) / (0.01 * self.sample_rate)).exp();
+        let target_cutoff = self.patch.filter.cutoff.max(1.0).log2();
+        for block in out.chunks_mut(BLOCK) {
+            self.gain += (self.patch.volume - self.gain) * k;
+            self.log_cutoff += (target_cutoff - self.log_cutoff) * k;
+            let cutoff = self.log_cutoff.exp2();
+            for v in &mut self.voices {
+                v.render_add(block, &self.patch, self.bend, cutoff, self.sample_rate);
+            }
+            let gain = VOICE_GAIN * self.gain;
+            for s in block {
+                // Gentle saturation instead of hard clipping on loud chords.
+                *s = (*s * gain).tanh();
+            }
         }
     }
 }
@@ -240,11 +236,12 @@ mod tests {
     #[test]
     fn full_chord_does_not_clip() {
         let mut e = Engine::new(SR);
-        e.handle(Event::Param(Param::Volume(1.0)));
+        e.handle(Event::Patch(Patch { volume: 1.0, ..Patch::default() }));
         for n in 0..MAX_VOICES as u8 {
             e.handle(Event::NoteOn { note: 48 + n, velocity: 127 });
         }
-        // Worst case is all voices in phase; sum is bounded by voices × gain.
-        assert!(peak(&mut e, 48_000) <= MAX_VOICES as f32 * VOICE_GAIN);
+        // Saturation keeps even 16 loud voices inside the -1..1 range.
+        let p = peak(&mut e, 48_000);
+        assert!(p.is_finite() && p < 1.0, "{p}");
     }
 }

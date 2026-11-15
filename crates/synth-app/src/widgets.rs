@@ -1,108 +1,9 @@
-//! Synth-style controls drawn with egui: knob, envelope graph, level meter and an
+//! Synth-style controls drawn with egui: envelope graph, level meter and an
 //! on-screen piano keyboard.
-
-use std::f32::consts::PI;
 
 use eframe::egui::{self, Color32, Pos2, Rect, Sense, Stroke, StrokeKind, Vec2};
 
 use crate::theme;
-
-/// How a knob maps its 0..1 travel to a value.
-#[derive(Clone, Copy)]
-pub enum Curve {
-    Linear,
-    /// Equal travel for equal ratios; for times and frequencies. `min` must be > 0.
-    Log,
-}
-
-pub struct Knob<'a> {
-    pub label: &'a str,
-    pub value: &'a mut f32,
-    pub min: f32,
-    pub max: f32,
-    pub default: f32,
-    pub curve: Curve,
-    pub format: fn(f32) -> String,
-}
-
-impl Knob<'_> {
-    fn value_to_norm(&self, v: f32) -> f32 {
-        let t = match self.curve {
-            Curve::Linear => (v - self.min) / (self.max - self.min),
-            Curve::Log => (v / self.min).ln() / (self.max / self.min).ln(),
-        };
-        t.clamp(0.0, 1.0)
-    }
-
-    fn norm_to_value(&self, t: f32) -> f32 {
-        let t = t.clamp(0.0, 1.0);
-        match self.curve {
-            Curve::Linear => self.min + t * (self.max - self.min),
-            Curve::Log => self.min * (self.max / self.min).powf(t),
-        }
-    }
-
-    /// Drag up/down to turn (Shift for fine steps), double-click for the default.
-    /// Returns true when the value changed.
-    pub fn show(self, ui: &mut egui::Ui) -> bool {
-        let size = Vec2::new(64.0, 92.0);
-        let (rect, response) = ui.allocate_exact_size(size, Sense::click_and_drag());
-        let mut norm = self.value_to_norm(*self.value);
-        let before = *self.value;
-        if response.dragged() {
-            let fine = ui.input(|i| i.modifiers.shift);
-            norm -= response.drag_delta().y / if fine { 800.0 } else { 160.0 };
-            *self.value = self.norm_to_value(norm);
-        }
-        if response.double_clicked() {
-            *self.value = self.default;
-        }
-        if response.hovered() {
-            let scroll = ui.input(|i| i.smooth_scroll_delta.y);
-            if scroll != 0.0 {
-                *self.value = self.norm_to_value(norm + scroll / 600.0);
-            }
-        }
-        let norm = self.value_to_norm(*self.value);
-
-        let painter = ui.painter_at(rect);
-        let center = Pos2::new(rect.center().x, rect.top() + 28.0);
-        let radius = 22.0;
-        let start = 0.75 * PI;
-        let sweep = 1.5 * PI;
-        let arc = |from: f32, to: f32, r: f32| -> Vec<Pos2> {
-            let n = 40;
-            (0..=n).map(|i| {
-                let a = from + (to - from) * i as f32 / n as f32;
-                center + Vec2::new(a.cos(), a.sin()) * r
-            }).collect()
-        };
-        let active = response.hovered() || response.dragged();
-        painter.add(egui::Shape::line(arc(start, start + sweep, radius), Stroke::new(4.0, theme::TRACK)));
-        if norm > 0.0 {
-            painter.add(egui::Shape::line(arc(start, start + sweep * norm, radius), Stroke::new(4.0, theme::ACCENT)));
-        }
-        painter.circle_filled(center, radius - 6.0, if active { theme::KNOB_HOVER } else { theme::KNOB });
-        let a = start + sweep * norm;
-        let dir = Vec2::new(a.cos(), a.sin());
-        painter.line_segment([center + dir * 5.0, center + dir * (radius - 8.0)], Stroke::new(2.5, theme::TEXT));
-        painter.text(
-            Pos2::new(center.x, rect.top() + 62.0),
-            egui::Align2::CENTER_CENTER,
-            self.label,
-            egui::FontId::proportional(13.0),
-            theme::TEXT,
-        );
-        painter.text(
-            Pos2::new(center.x, rect.top() + 80.0),
-            egui::Align2::CENTER_CENTER,
-            (self.format)(*self.value),
-            egui::FontId::monospace(11.0),
-            if active { theme::ACCENT } else { theme::MUTED },
-        );
-        *self.value != before
-    }
-}
 
 /// Shape of the ADSR envelope, with a fixed-width sustain segment.
 pub fn envelope_graph(ui: &mut egui::Ui, attack: f32, decay: f32, sustain: f32, release: f32, size: Vec2) {
@@ -225,14 +126,3 @@ pub fn led(ui: &mut egui::Ui, color: Color32) -> egui::Response {
     response
 }
 
-/// One cycle of a sine wave, as the oscillator's picture.
-pub fn sine_icon(ui: &mut egui::Ui, size: Vec2) {
-    let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
-    let points: Vec<Pos2> = (0..=60)
-        .map(|i| {
-            let t = i as f32 / 60.0;
-            Pos2::new(rect.left() + t * rect.width(), rect.center().y - (t * 2.0 * PI).sin() * rect.height() * 0.42)
-        })
-        .collect();
-    ui.painter().add(egui::Shape::line(points, Stroke::new(2.0, theme::ACCENT)));
-}

@@ -5,13 +5,14 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use eframe::egui::{self, Key, RichText, Vec2};
-use synth_core::{AdsrParams, Event, Param};
+use synth_core::{AdsrParams, Event, OscParams, Patch};
 
 use crate::audio::{self, AudioOutput};
+use crate::knob::{self, Knob};
 use crate::midi_in::{self, MidiConnection};
 use crate::shared::{Events, Status};
 use crate::theme;
-use crate::widgets::{self, Curve, Knob};
+use crate::widgets;
 
 /// Lowest and highest key of the on-screen keyboard.
 const PIANO_LOW: u8 = 36; // C2
@@ -40,8 +41,7 @@ pub struct SynthApp {
     seen_messages: u32,
     midi_glow: f32,
 
-    volume: f32,
-    adsr: AdsrParams,
+    patch: Patch,
 
     /// Octave of the computer keyboard's A key (4 → C4).
     pc_octave: i32,
@@ -67,28 +67,15 @@ impl SynthApp {
             last_scan: Instant::now() - RESCAN,
             seen_messages: 0,
             midi_glow: 0.0,
-            volume: 0.7,
-            adsr: AdsrParams::default(),
+            patch: Patch::default(),
             pc_octave: 4,
             pc_held: HashMap::new(),
             mouse_note: None,
             meter: 0.0,
         };
-        for p in app.all_params() {
-            app.events.send(Event::Param(p));
-        }
+        app.events.send(Event::Patch(app.patch));
         app.scan_midi(true);
         app
-    }
-
-    fn all_params(&self) -> [Param; 5] {
-        [
-            Param::Volume(self.volume),
-            Param::Attack(self.adsr.attack),
-            Param::Decay(self.adsr.decay),
-            Param::SustainLevel(self.adsr.sustain),
-            Param::Release(self.adsr.release),
-        ]
     }
 
     /// Refreshes the list of MIDI inputs; with `auto`, connects to the first one when
@@ -172,7 +159,7 @@ impl SynthApp {
     fn header(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             ui.label(RichText::new("SYNTH").size(20.0).strong().color(theme::ACCENT));
-            ui.label(RichText::new(format!("v{} · aşama 1", env!("CARGO_PKG_VERSION"))).color(theme::MUTED));
+            ui.label(RichText::new(format!("v{} · aşama 2", env!("CARGO_PKG_VERSION"))).color(theme::MUTED));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| match &self.audio {
                 Ok(a) => {
                     ui.label(RichText::new(format!("{} · {:.1} kHz", a.name, a.sample_rate as f32 / 1000.0)).color(theme::MUTED));
@@ -225,57 +212,46 @@ impl SynthApp {
     }
 
     fn panel(&mut self, ui: &mut egui::Ui) {
-        let mut changed: Vec<Param> = Vec::new();
+        let before = self.patch;
+        let p = &mut self.patch;
+        ui.spacing_mut().item_spacing = Vec2::new(12.0, 12.0);
         ui.horizontal_top(|ui| {
-            ui.spacing_mut().item_spacing = Vec2::new(12.0, 8.0);
-
-            theme::section(ui, "OSİLATÖR", |ui| {
-                ui.set_min_height(92.0);
-                ui.vertical(|ui| {
-                    widgets::sine_icon(ui, Vec2::new(120.0, 40.0));
-                    ui.label(RichText::new("Sinüs").size(16.0).color(theme::TEXT));
-                    ui.add_space(4.0);
-                    ui.label(RichText::new("Testere, kare ve üçgen\n2. aşamada gelecek").size(11.0).color(theme::MUTED));
-                });
-            });
-
-            theme::section(ui, "ZARF (ADSR)", |ui| {
+            for (i, osc) in p.osc.iter_mut().enumerate() {
+                let title = if i == 0 { "OSİLATÖR 1" } else { "OSİLATÖR 2" };
+                theme::section(ui, title, |ui| oscillator(ui, osc, i == 1));
+            }
+            theme::section(ui, "FİLTRE", |ui| {
+                knob::filter_mode_selector(ui, &mut p.filter.mode);
                 ui.horizontal(|ui| {
-                    let a = &mut self.adsr;
-                    if time_knob(ui, "Attack", &mut a.attack, 0.001, 5.0, 0.01) {
-                        changed.push(Param::Attack(a.attack));
-                    }
-                    if time_knob(ui, "Decay", &mut a.decay, 0.005, 5.0, 0.3) {
-                        changed.push(Param::Decay(a.decay));
-                    }
-                    let sustain = Knob { label: "Sustain", value: &mut a.sustain, min: 0.0, max: 1.0, default: 0.7, curve: Curve::Linear, format: percent };
-                    if sustain.show(ui) {
-                        changed.push(Param::SustainLevel(a.sustain));
-                    }
-                    if time_knob(ui, "Release", &mut a.release, 0.005, 8.0, 0.4) {
-                        changed.push(Param::Release(a.release));
-                    }
-                    let a = self.adsr;
-                    widgets::envelope_graph(ui, a.attack, a.decay, a.sustain, a.release, Vec2::new(180.0, 92.0));
+                    ui.spacing_mut().item_spacing.x = 2.0;
+                    let f = &mut p.filter;
+                    Knob::new("Cutoff", &mut f.cutoff, 20.0, 20_000.0).log().default_value(800.0).format(hertz).show(ui);
+                    Knob::new("Rezonans", &mut f.resonance, 0.0, 1.0).default_value(0.3).format(percent).show(ui);
+                    Knob::new("Zarf", &mut f.env_amount, -1.0, 1.0).bipolar().default_value(0.4).format(signed_percent).show(ui);
+                    Knob::new("Nota izi", &mut f.key_track, 0.0, 1.0).default_value(0.5).format(percent).show(ui);
                 });
             });
-
+        });
+        ui.horizontal_top(|ui| {
+            theme::section(ui, "FİLTRE ZARFI", |ui| envelope(ui, &mut p.filter_env));
+            theme::section(ui, "AMFİ ZARFI", |ui| envelope(ui, &mut p.amp_env));
             theme::section(ui, "ÇIKIŞ", |ui| {
                 ui.horizontal(|ui| {
-                    let volume = Knob { label: "Ses", value: &mut self.volume, min: 0.0, max: 1.0, default: 0.7, curve: Curve::Linear, format: percent };
-                    if volume.show(ui) {
-                        changed.push(Param::Volume(self.volume));
-                    }
+                    Knob::new("Ses", &mut p.volume, 0.0, 1.0).default_value(0.7).format(percent).show(ui);
                     widgets::level_meter(ui, self.meter, Vec2::new(12.0, 92.0));
                     ui.vertical(|ui| {
                         ui.label(RichText::new("Ses sayısı").size(11.0).color(theme::MUTED));
                         ui.label(RichText::new(format!("{} / {}", self.status.voices(), synth_core::MAX_VOICES)).monospace().size(16.0));
+                        ui.add_space(8.0);
+                        if ui.button("Varsayılan ses").on_hover_text("Tüm ayarları başlangıç değerine döndürür").clicked() {
+                            *p = Patch::default();
+                        }
                     });
                 });
             });
         });
-        for p in changed {
-            self.events.send(Event::Param(p));
+        if self.patch != before {
+            self.events.send(Event::Patch(self.patch));
         }
     }
 
@@ -303,12 +279,58 @@ fn percent(v: f32) -> String {
     format!("{:.0}%", v * 100.0)
 }
 
+fn signed_percent(v: f32) -> String {
+    format!("{:+.0}%", v * 100.0)
+}
+
 fn seconds(v: f32) -> String {
     if v < 1.0 { format!("{:.0} ms", v * 1000.0) } else { format!("{v:.2} s") }
 }
 
-fn time_knob(ui: &mut egui::Ui, label: &str, value: &mut f32, min: f32, max: f32, default: f32) -> bool {
-    Knob { label, value, min, max, default, curve: Curve::Log, format: seconds }.show(ui)
+fn hertz(v: f32) -> String {
+    if v < 1000.0 { format!("{v:.0} Hz") } else { format!("{:.2} kHz", v / 1000.0) }
+}
+
+fn signed_int(v: f32) -> String {
+    format!("{:+}", v as i32)
+}
+
+fn cents(v: f32) -> String {
+    format!("{v:+.0} ct")
+}
+
+/// Waveform buttons and pitch/level knobs of one oscillator. Only the second one
+/// gets a semitone knob (for intervals like a fifth).
+fn oscillator(ui: &mut egui::Ui, osc: &mut OscParams, semitones: bool) {
+    knob::wave_selector(ui, &mut osc.wave);
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 2.0;
+        let mut octave = osc.octave as f32;
+        if Knob::new("Oktav", &mut octave, -3.0, 3.0).integer().default_value(0.0).bipolar().format(signed_int).show(ui) {
+            osc.octave = octave as i8;
+        }
+        if semitones {
+            let mut semi = osc.semitones as f32;
+            if Knob::new("Yarım ton", &mut semi, -12.0, 12.0).integer().default_value(0.0).bipolar().format(signed_int).show(ui) {
+                osc.semitones = semi as i8;
+            }
+        }
+        Knob::new("İnce", &mut osc.fine, -50.0, 50.0).default_value(0.0).bipolar().format(cents).show(ui);
+        Knob::new("Seviye", &mut osc.level, 0.0, 1.0).format(percent).show(ui);
+    });
+}
+
+/// Four ADSR knobs and the shape they make.
+fn envelope(ui: &mut egui::Ui, env: &mut AdsrParams) {
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 2.0;
+        Knob::new("Attack", &mut env.attack, 0.001, 5.0).log().format(seconds).show(ui);
+        Knob::new("Decay", &mut env.decay, 0.005, 5.0).log().format(seconds).show(ui);
+        Knob::new("Sustain", &mut env.sustain, 0.0, 1.0).format(percent).show(ui);
+        Knob::new("Release", &mut env.release, 0.005, 8.0).log().format(seconds).show(ui);
+        ui.add_space(8.0);
+        widgets::envelope_graph(ui, env.attack, env.decay, env.sustain, env.release, Vec2::new(150.0, 92.0));
+    });
 }
 
 impl eframe::App for SynthApp {

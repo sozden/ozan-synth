@@ -36,9 +36,12 @@ pub fn section<R>(ui: &mut egui::Ui, title: &str, add: impl FnOnce(&mut egui::Ui
         .corner_radius(8.0)
         .inner_margin(egui::Margin::same(12))
         .show(ui, |ui| {
-            ui.label(egui::RichText::new(title).size(12.0).color(MUTED).strong());
-            ui.add_space(6.0);
-            add(ui)
+            ui.vertical(|ui| {
+                ui.spacing_mut().item_spacing.y = 6.0;
+                ui.label(egui::RichText::new(title).size(12.0).color(MUTED).strong());
+                add(ui)
+            })
+            .inner
         })
         .inner
 }

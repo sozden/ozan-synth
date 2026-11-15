@@ -5,9 +5,14 @@ Play it with a USB MIDI keyboard, the computer keyboard or the mouse.
 
 *Türkçe açıklama aşağıda.*
 
-## Status — stage 1
+## Status — stage 2
 
-- Polyphonic (16 voices) sine synthesizer with an ADSR envelope
+- Classic subtractive voice: 2 oscillators → resonant filter → amplifier, 16 voices
+- Band-limited sine, saw, square and triangle (PolyBLEP / PolyBLAMP — no aliasing whine on high notes)
+- Oscillator octave, semitone (osc 2), fine tune and level
+- Zero-delay-feedback state-variable filter: LP 12 dB, LP 24 dB, band-pass, high-pass; cutoff, resonance, envelope amount (±7 octaves), key tracking
+- Separate ADSR envelopes for filter and amplifier
+- Gentle output saturation instead of hard clipping
 - USB MIDI input (all channels): notes, velocity, sustain pedal, pitch bend (±2 semitones), all-notes-off
 - MIDI keyboards are found and connected automatically
 - Panel with knobs (drag up/down, Shift for fine, double-click for default, mouse wheel), envelope graph, level meter
@@ -35,7 +40,7 @@ Events from MIDI and the panel reach the audio thread through a lock-free queue 
 ## Roadmap
 
 1. ~~Single sine voice, MIDI, audio~~ → done, with polyphony and ADSR
-2. Classic synth: band-limited saw/square/triangle (PolyBLEP), resonant low-pass filter, second oscillator
+2. ~~Classic synth: band-limited saw/square/triangle (PolyBLEP), resonant filter, second oscillator~~ → done
 3. Modulation: LFO, mod wheel, presets (save/load)
 4. Effects: chorus, delay, reverb
 5. Wavetable oscillator, unison, modulation matrix
@@ -48,8 +53,10 @@ Events from MIDI and the panel reach the audio thread through a lock-free queue 
 Rust ile yazılmış, adım adım büyütülen açık kaynak bir yazılım synthesizer.
 USB MIDI klavye, bilgisayar klavyesi ya da fareyle çalınır.
 
-**1. aşamada olanlar:** 16 sesli polifonik sinüs, ADSR zarfı, USB MIDI (nota, velocity,
-sustain pedalı, pitch bend), otomatik MIDI bağlantısı, knob'lu panel, ekran klavyesi.
+**Şu an (2. aşama):** 16 sesli, iki osilatörlü klasik synth. Aliasing'siz sinüs, testere,
+kare ve üçgen dalgalar; rezonanslı filtre (LP12, LP24, BP, HP) ve filtre ile amfi için
+ayrı ADSR zarfları. USB MIDI (nota, velocity, sustain pedalı, pitch bend) otomatik
+bağlanır; knob'lu panel ve ekran klavyesi var.
 
 **Çalıştırma:** `cargo run --release -p synth-app`
 
