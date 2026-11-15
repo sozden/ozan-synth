@@ -80,37 +80,51 @@ pub fn dropouts(env_db: &[f32]) -> Vec<usize> {
     found
 }
 
-/// Reads a mono 32-bit float WAV as written by [`write_wav`].
+/// Reads a 32-bit float WAV as written by [`write_wav`]; several channels are mixed.
 pub fn read_wav(path: &Path) -> std::io::Result<(Vec<f32>, u32)> {
     let d = std::fs::read(path)?;
     if d.len() < 44 || &d[0..4] != b"RIFF" || u16::from_le_bytes([d[20], d[21]]) != 3 {
-        return Err(std::io::Error::other("32-bit float mono WAV bekleniyor"));
+        return Err(std::io::Error::other("32-bit float WAV bekleniyor"));
     }
+    let channels = u16::from_le_bytes([d[22], d[23]]).max(1) as usize;
     let rate = u32::from_le_bytes([d[24], d[25], d[26], d[27]]);
-    let x = d[44..].chunks_exact(4).map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]])).collect();
+    let samples: Vec<f32> = d[44..].chunks_exact(4).map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]])).collect();
+    let x = samples.chunks_exact(channels).map(|f| f.iter().sum::<f32>() / channels as f32).collect();
     Ok((x, rate))
 }
 
-pub fn write_wav(path: &Path, samples: &[f32], sample_rate: u32) -> std::io::Result<()> {
-    // 32-bit float, mono.
-    let data_len = (samples.len() * 4) as u32;
+/// Writes 32-bit float WAV; `channels` are interleaved (all the same length).
+pub fn write_wav(path: &Path, channels: &[&[f32]], sample_rate: u32) -> std::io::Result<()> {
+    let n = channels.len().max(1);
+    let frames = channels.first().map_or(0, |c| c.len());
+    let data_len = (frames * n * 4) as u32;
     let mut out = Vec::with_capacity(44 + data_len as usize);
     out.extend_from_slice(b"RIFF");
     out.extend_from_slice(&(36 + data_len).to_le_bytes());
     out.extend_from_slice(b"WAVEfmt ");
     out.extend_from_slice(&16u32.to_le_bytes());
     out.extend_from_slice(&3u16.to_le_bytes()); // IEEE float
-    out.extend_from_slice(&1u16.to_le_bytes());
+    out.extend_from_slice(&(n as u16).to_le_bytes());
     out.extend_from_slice(&sample_rate.to_le_bytes());
-    out.extend_from_slice(&(sample_rate * 4).to_le_bytes());
-    out.extend_from_slice(&4u16.to_le_bytes());
+    out.extend_from_slice(&(sample_rate * 4 * n as u32).to_le_bytes());
+    out.extend_from_slice(&(4 * n as u16).to_le_bytes());
     out.extend_from_slice(&32u16.to_le_bytes());
     out.extend_from_slice(b"data");
     out.extend_from_slice(&data_len.to_le_bytes());
-    for s in samples {
-        out.extend_from_slice(&s.to_le_bytes());
+    for i in 0..frames {
+        for c in channels {
+            out.extend_from_slice(&c[i].to_le_bytes());
+        }
     }
     std::fs::write(path, out)
+}
+
+/// Correlation of left and right: 1 = the same (mono), 0 = unrelated (wide).
+pub fn correlation(l: &[f32], r: &[f32]) -> f32 {
+    let lr: f32 = l.iter().zip(r).map(|(a, b)| a * b).sum();
+    let ll: f32 = l.iter().map(|a| a * a).sum();
+    let rr: f32 = r.iter().map(|b| b * b).sum();
+    if ll == 0.0 || rr == 0.0 { 1.0 } else { lr / (ll * rr).sqrt() }
 }
 
 /// Spectrogram as a PNG: time left to right, frequency (linear, 0 to Nyquist)

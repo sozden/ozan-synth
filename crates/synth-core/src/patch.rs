@@ -88,6 +88,76 @@ impl Default for WheelParams {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize), serde(default))]
+pub struct ChorusParams {
+    pub on: bool,
+    /// Sweep speed, Hz (0.1..5).
+    pub rate: f32,
+    /// Sweep width, 0..1 (up to 6 ms).
+    pub depth: f32,
+    /// 0..1; full is half dry, half chorus.
+    pub mix: f32,
+}
+
+impl Default for ChorusParams {
+    fn default() -> Self {
+        Self { on: false, rate: 0.6, depth: 0.5, mix: 0.7 }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize), serde(default))]
+pub struct DelayParams {
+    pub on: bool,
+    /// Time between repeats, ms (20..2000).
+    pub time_ms: f32,
+    /// 0..0.95.
+    pub feedback: f32,
+    /// Low-pass in the repeats, Hz: lower makes each echo darker.
+    pub tone: f32,
+    /// Repeats alternate between left and right.
+    pub ping_pong: bool,
+    /// Level of the echoes, 0..1.
+    pub mix: f32,
+}
+
+impl Default for DelayParams {
+    fn default() -> Self {
+        Self { on: false, time_ms: 375.0, feedback: 0.35, tone: 5000.0, ping_pong: true, mix: 0.3 }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize), serde(default))]
+pub struct ReverbParams {
+    pub on: bool,
+    /// Room size, 0..1.
+    pub size: f32,
+    /// Time to fade by 60 dB, seconds (0.3..10).
+    pub decay: f32,
+    /// 0 bright .. 1 dark.
+    pub damping: f32,
+    /// Gap before the reverb starts, ms (0..100).
+    pub predelay_ms: f32,
+    /// Level of the reverb, 0..1.
+    pub mix: f32,
+}
+
+impl Default for ReverbParams {
+    fn default() -> Self {
+        Self { on: false, size: 0.5, decay: 1.8, damping: 0.4, predelay_ms: 10.0, mix: 0.3 }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize), serde(default))]
+pub struct EffectsParams {
+    pub chorus: ChorusParams,
+    pub delay: DelayParams,
+    pub reverb: ReverbParams,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize), serde(default))]
 pub struct Patch {
     pub osc: [OscParams; 2],
     pub filter: FilterParams,
@@ -97,6 +167,7 @@ pub struct Patch {
     pub wheel: WheelParams,
     /// Pitch-bend range in semitones each way (0..12).
     pub bend_range: f32,
+    pub fx: EffectsParams,
     /// 0..1.
     pub volume: f32,
 }
@@ -115,6 +186,7 @@ impl Default for Patch {
             lfo: LfoParams::default(),
             wheel: WheelParams::default(),
             bend_range: 2.0,
+            fx: EffectsParams::default(),
             volume: 0.7,
         }
     }

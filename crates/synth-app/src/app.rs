@@ -385,9 +385,10 @@ impl SynthApp {
                 ui.label(RichText::new(e).color(theme::t().warm));
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.button("Tüm notaları sustur").clicked() {
+                if ui.button("Tüm notaları sustur").on_hover_text("Çalan notaları, yankı ve reverb kuyruklarını keser").clicked() {
                     self.release_pc_keys();
                     self.events.send(Event::AllNotesOff);
+                    self.events.send(Event::ClearEffects);
                 }
                 ui.add_space(12.0);
                 let th = theme::t();
@@ -478,6 +479,46 @@ impl SynthApp {
                 });
             });
         });
+        ui.horizontal_top(|ui| {
+            let fx = &mut p.fx;
+            theme::section(ui, "CHORUS", |ui| {
+                widgets::toggle(ui, &mut fx.chorus.on, "Açık");
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = 2.0;
+                    let c = &mut fx.chorus;
+                    Knob::new("Hız", &mut c.rate, 0.1, 5.0).log().default_value(0.6).format(rate).show(ui);
+                    Knob::new("Derinlik", &mut c.depth, 0.0, 1.0).default_value(0.5).format(percent).show(ui);
+                    Knob::new("Karışım", &mut c.mix, 0.0, 1.0).default_value(0.7).format(percent).show(ui);
+                });
+            });
+            theme::section(ui, "DELAY", |ui| {
+                ui.horizontal(|ui| {
+                    widgets::toggle(ui, &mut fx.delay.on, "Açık");
+                    ui.add_space(12.0);
+                    widgets::toggle(ui, &mut fx.delay.ping_pong, "Ping-pong");
+                });
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = 2.0;
+                    let d = &mut fx.delay;
+                    Knob::new("Süre", &mut d.time_ms, 20.0, 2000.0).log().default_value(375.0).format(millis).show(ui);
+                    Knob::new("Tekrar", &mut d.feedback, 0.0, 0.95).default_value(0.35).format(percent).show(ui);
+                    Knob::new("Ton", &mut d.tone, 500.0, 16_000.0).log().default_value(5000.0).format(hertz).show(ui);
+                    Knob::new("Karışım", &mut d.mix, 0.0, 1.0).default_value(0.3).format(percent).show(ui);
+                });
+            });
+            theme::section(ui, "REVERB", |ui| {
+                widgets::toggle(ui, &mut fx.reverb.on, "Açık");
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = 2.0;
+                    let r = &mut fx.reverb;
+                    Knob::new("Boyut", &mut r.size, 0.0, 1.0).default_value(0.5).format(percent).show(ui);
+                    Knob::new("Süre", &mut r.decay, 0.3, 10.0).log().default_value(1.8).format(seconds).show(ui);
+                    Knob::new("Sönüm", &mut r.damping, 0.0, 1.0).default_value(0.4).format(percent).show(ui);
+                    Knob::new("Gecikme", &mut r.predelay_ms, 0.0, 100.0).default_value(10.0).format(millis).show(ui);
+                    Knob::new("Karışım", &mut r.mix, 0.0, 1.0).default_value(0.3).format(percent).show(ui);
+                });
+            });
+        });
         if self.patch != before {
             self.events.send(Event::Patch(self.patch));
         }
@@ -517,6 +558,10 @@ fn seconds(v: f32) -> String {
 
 fn hertz(v: f32) -> String {
     if v < 1000.0 { format!("{v:.0} Hz") } else { format!("{:.2} kHz", v / 1000.0) }
+}
+
+fn millis(v: f32) -> String {
+    format!("{v:.0} ms")
 }
 
 fn rate(v: f32) -> String {
@@ -609,7 +654,9 @@ impl eframe::App for SynthApp {
         let pad = egui::Frame::new().fill(theme::t().bg).inner_margin(egui::Margin::same(14));
         egui::Panel::top("header").frame(pad).show(ui, |ui| self.header(ui));
         egui::Panel::bottom("keys").frame(pad).show(ui, |ui| self.keyboard(ui));
-        egui::CentralPanel::default().frame(pad).show(ui, |ui| self.panel(ui));
+        egui::CentralPanel::default().frame(pad).show(ui, |ui| {
+            egui::ScrollArea::vertical().auto_shrink(false).show(ui, |ui| self.panel(ui));
+        });
 
         // Meter, LED and lit keys follow the audio thread.
         ctx.request_repaint_after(Duration::from_millis(16));

@@ -1,13 +1,14 @@
 //! Factory presets: one example of each classic sound the engine can make.
 //!
 //! Volumes are matched by measurement (`synth-lab render`) so that switching
-//! presets does not jump in loudness: about -25 dB RMS for the test phrase.
+//! presets does not jump in loudness: about -25 dB RMS while the test phrase
+//! plays (short plucks a little lower, judged by their peaks).
 
 use crate::envelope::AdsrParams;
 use crate::filter::FilterMode;
 use crate::lfo::LfoWave;
 use crate::oscillator::Waveform;
-use crate::patch::{FilterParams, LfoParams, OscParams, Patch, WheelParams};
+use crate::patch::{ChorusParams, DelayParams, EffectsParams, FilterParams, LfoParams, OscParams, Patch, ReverbParams, WheelParams};
 
 fn osc(wave: Waveform, octave: i8, semitones: i8, fine: f32, level: f32) -> OscParams {
     OscParams { wave, octave, semitones, fine, level }
@@ -27,13 +28,31 @@ fn lfo(wave: LfoWave, rate: f32, pitch: f32, cutoff: f32, amp: f32) -> LfoParams
     LfoParams { wave, rate, pitch, cutoff, amp }
 }
 
+fn chorus(rate: f32, depth: f32, mix: f32) -> Option<ChorusParams> {
+    Some(ChorusParams { on: true, rate, depth, mix })
+}
+
+fn delay(time_ms: f32, feedback: f32, tone: f32, ping_pong: bool, mix: f32) -> Option<DelayParams> {
+    Some(DelayParams { on: true, time_ms, feedback, tone, ping_pong, mix })
+}
+
+fn reverb(size: f32, decay: f32, damping: f32, predelay_ms: f32, mix: f32) -> Option<ReverbParams> {
+    Some(ReverbParams { on: true, size, decay, damping, predelay_ms, mix })
+}
+
+/// Effects in use; the others stay off with their default settings.
+fn fx(c: Option<ChorusParams>, d: Option<DelayParams>, r: Option<ReverbParams>) -> EffectsParams {
+    let off = EffectsParams::default();
+    EffectsParams { chorus: c.unwrap_or(off.chorus), delay: d.unwrap_or(off.delay), reverb: r.unwrap_or(off.reverb) }
+}
+
 /// Built-in presets, in the order they appear in the list.
 pub fn factory() -> Vec<(&'static str, Patch)> {
     use FilterMode::*;
     use Waveform::*;
     let d = Patch::default();
     vec![
-        ("Başlangıç", Patch { volume: 0.89, ..d }),
+        ("Başlangıç", Patch { volume: 0.88, ..d }),
         (
             "Acid bas",
             Patch {
@@ -41,7 +60,7 @@ pub fn factory() -> Vec<(&'static str, Patch)> {
                 filter: filter(Lp24, 180.0, 0.82, 0.55, 0.3),
                 filter_env: adsr(0.002, 0.18, 0.0, 0.1),
                 amp_env: adsr(0.002, 0.3, 0.9, 0.08),
-                volume: 0.3,
+                volume: 0.31,
                 ..d
             },
         ),
@@ -52,7 +71,7 @@ pub fn factory() -> Vec<(&'static str, Patch)> {
                 filter: filter(Lp24, 300.0, 0.2, 0.35, 0.3),
                 filter_env: adsr(0.003, 0.35, 0.2, 0.15),
                 amp_env: adsr(0.003, 0.2, 1.0, 0.1),
-                volume: 0.47,
+                volume: 0.49,
                 ..d
             },
         ),
@@ -63,7 +82,7 @@ pub fn factory() -> Vec<(&'static str, Patch)> {
                 filter: filter(Lp24, 220.0, 0.6, 0.1, 0.2),
                 amp_env: adsr(0.005, 0.2, 1.0, 0.15),
                 lfo: lfo(LfoWave::Sine, 3.0, 0.0, 0.6, 0.0),
-                volume: 0.47,
+                volume: 0.5,
                 ..d
             },
         ),
@@ -75,7 +94,8 @@ pub fn factory() -> Vec<(&'static str, Patch)> {
                 filter_env: adsr(1.2, 2.0, 0.6, 2.0),
                 amp_env: adsr(0.8, 1.0, 0.9, 2.5),
                 lfo: lfo(LfoWave::Triangle, 0.3, 0.0, 0.15, 0.0),
-                volume: 0.82,
+                fx: fx(chorus(0.5, 0.7, 0.8), None, reverb(0.8, 4.5, 0.5, 20.0, 0.45)),
+                volume: 0.95,
                 ..d
             },
         ),
@@ -86,7 +106,8 @@ pub fn factory() -> Vec<(&'static str, Patch)> {
                 filter: filter(Lp24, 500.0, 0.1, 0.55, 0.5),
                 filter_env: adsr(0.08, 0.6, 0.45, 0.3),
                 amp_env: adsr(0.04, 0.2, 0.9, 0.25),
-                volume: 0.66,
+                fx: fx(None, None, reverb(0.6, 2.2, 0.4, 15.0, 0.25)),
+                volume: 0.64,
                 ..d
             },
         ),
@@ -97,7 +118,8 @@ pub fn factory() -> Vec<(&'static str, Patch)> {
                 filter: filter(Lp24, 250.0, 0.35, 0.7, 0.8),
                 filter_env: adsr(0.001, 0.25, 0.0, 0.25),
                 amp_env: adsr(0.001, 0.6, 0.0, 0.4),
-                volume: 0.72,
+                fx: fx(None, delay(300.0, 0.4, 4000.0, true, 0.35), reverb(0.5, 1.5, 0.4, 5.0, 0.2)),
+                volume: 1.0,
                 ..d
             },
         ),
@@ -109,7 +131,8 @@ pub fn factory() -> Vec<(&'static str, Patch)> {
                 amp_env: adsr(0.01, 0.2, 1.0, 0.2),
                 lfo: lfo(LfoWave::Sine, 5.5, 0.15, 0.0, 0.0),
                 wheel: WheelParams { vibrato: 1.0, cutoff: 0.2 },
-                volume: 0.54,
+                fx: fx(None, delay(420.0, 0.3, 3500.0, false, 0.25), reverb(0.6, 2.5, 0.4, 20.0, 0.3)),
+                volume: 0.49,
                 ..d
             },
         ),
@@ -120,7 +143,8 @@ pub fn factory() -> Vec<(&'static str, Patch)> {
                 filter: filter(Lp12, 8000.0, 0.0, 0.0, 0.0),
                 amp_env: adsr(0.005, 0.1, 1.0, 0.08),
                 lfo: lfo(LfoWave::Sine, 6.0, 0.0, 0.0, 0.4),
-                volume: 0.57,
+                fx: fx(chorus(0.8, 0.4, 0.5), None, reverb(0.5, 1.6, 0.5, 10.0, 0.2)),
+                volume: 0.79,
                 ..d
             },
         ),
@@ -131,7 +155,19 @@ pub fn factory() -> Vec<(&'static str, Patch)> {
                 filter: filter(Lp24, 600.0, 0.75, 0.2, 0.5),
                 amp_env: adsr(0.005, 0.3, 1.0, 0.3),
                 lfo: lfo(LfoWave::SampleHold, 8.0, 0.0, 0.5, 0.0),
-                volume: 0.33,
+                fx: fx(None, delay(250.0, 0.5, 5000.0, true, 0.35), None),
+                volume: 0.32,
+                ..d
+            },
+        ),
+        (
+            "Uzak çan",
+            Patch {
+                osc: [osc(Sine, 0, 0, 0.0, 0.8), osc(Triangle, 2, 0, 0.0, 0.4)],
+                filter: filter(Lp12, 6000.0, 0.0, 0.0, 0.3),
+                amp_env: adsr(0.001, 1.5, 0.0, 1.5),
+                fx: fx(None, delay(450.0, 0.45, 3000.0, true, 0.3), reverb(0.9, 6.0, 0.3, 30.0, 0.5)),
+                volume: 0.53,
                 ..d
             },
         ),
@@ -141,7 +177,7 @@ pub fn factory() -> Vec<(&'static str, Patch)> {
                 osc: [osc(Sine, 0, 0, 0.0, 1.0), OFF],
                 filter: filter(Lp12, 20_000.0, 0.0, 0.0, 0.0),
                 amp_env: adsr(0.01, 0.3, 0.7, 0.4),
-                volume: 0.77,
+                volume: 0.75,
                 ..d
             },
         ),

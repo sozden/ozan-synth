@@ -1,8 +1,9 @@
 //! Sound engine of the synthesizer.
 //!
-//! Nothing in here allocates or locks while rendering, so [`Engine::render`] can be
-//! called from a real-time audio callback.
+//! Nothing in here allocates or locks while rendering, so [`Engine::render_stereo`]
+//! can be called from a real-time audio callback.
 
+pub mod effects;
 pub mod engine;
 pub mod envelope;
 pub mod filter;
@@ -17,7 +18,7 @@ pub use engine::{Engine, Event, MAX_VOICES};
 pub use filter::FilterMode;
 pub use lfo::LfoWave;
 pub use oscillator::Waveform;
-pub use patch::{FilterParams, LfoParams, OscParams, Patch, WheelParams};
+pub use patch::{ChorusParams, DelayParams, EffectsParams, FilterParams, LfoParams, OscParams, Patch, ReverbParams, WheelParams};
 pub use envelope::AdsrParams;
 
 /// Frequency in Hz of a (fractional) MIDI note number; 69 = A4 = 440 Hz.

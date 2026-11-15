@@ -53,24 +53,30 @@ fn phrase() -> Vec<(f32, Event, &'static str)> {
     v
 }
 
-const LENGTH: f32 = 10.5;
+const LENGTH: f32 = 12.0;
 
-fn render(patch: &Patch) -> Vec<f32> {
+/// Loudness the factory presets are matched to (dB RMS while notes play).
+const TARGET_DB: f32 = -25.0;
+
+/// Left, right and their mix.
+fn render(patch: &Patch) -> (Vec<f32>, Vec<f32>, Vec<f32>) {
     let mut engine = Engine::new(SR);
     engine.handle(Event::Patch(*patch));
     let total = (LENGTH * SR) as usize;
-    let mut out = vec![0.0f32; total];
+    let mut l = vec![0.0f32; total];
+    let mut r = vec![0.0f32; total];
     let mut pos = 0;
     for (t, event, _) in phrase() {
         let at = ((t * SR) as usize).min(total);
         if at > pos {
-            engine.render(&mut out[pos..at]);
+            engine.render_stereo(&mut l[pos..at], &mut r[pos..at]);
             pos = at;
         }
         engine.handle(event);
     }
-    engine.render(&mut out[pos..]);
-    out
+    engine.render_stereo(&mut l[pos..], &mut r[pos..]);
+    let mid = l.iter().zip(&r).map(|(a, b)| 0.5 * (a + b)).collect();
+    (l, r, mid)
 }
 
 fn render_all(dir: PathBuf) -> std::io::Result<()> {
@@ -82,18 +88,22 @@ fn render_all(dir: PathBuf) -> std::io::Result<()> {
         .map(|(t, e, _)| (*t, if matches!(e, Event::NoteOn { .. }) { "on" } else { "off" }))
         .collect();
     let marks: Vec<f32> = events.iter().filter(|(_, _, l)| !l.is_empty()).map(|(t, _, _)| *t).collect();
-    println!("{:<14} {:>7} {:>7} {:>8} {:>7} {:>8} {:>9}  en kötü tık", "preset", "tepe dB", "rms dB", "DC", "kuyruk", "C7 HF dB", "tık skoru");
+    println!("{:<14} {:>7} {:>7} {:>8} {:>7} {:>8} {:>6} {:>9} {:>6}  en kötü tık", "preset", "tepe dB", "rms dB", "DC", "kuyruk", "C7 HF dB", "L/R", "tık skoru", "ses→");
     for (i, (name, patch)) in synth_core::presets::factory().into_iter().enumerate() {
-        let x = render(&patch);
+        let (left, right, x) = render(&patch);
         let slug: String = name.chars().map(|c| if c.is_alphanumeric() { c.to_ascii_lowercase() } else { '_' }).collect();
         let base = dir.join(format!("{:02}_{slug}", i + 1));
-        write_wav(&base.with_extension("wav"), &x, SR as u32)?;
+        write_wav(&base.with_extension("wav"), &[&left, &right], SR as u32)?;
         spectrogram_png(&base.with_extension("png"), &x, SR, &marks)?;
 
         let nan = x.iter().any(|v| !v.is_finite());
-        let active: Vec<f32> = x.iter().copied().filter(|v| v.abs() > 1e-4).collect();
+        // Loudness while notes play; the same window for every preset, so tails
+        // (reverb, release) do not drag it down.
+        let loud = db(rms(&x[..(7.6 * SR) as usize]));
+        let suggested = (patch.volume * 10f32.powf((TARGET_DB - loud) / 20.0)).min(1.0);
         let dc = x.iter().sum::<f32>() / x.len() as f32;
-        let tail = rms(&x[(10.0 * SR) as usize..]);
+        let tail = rms(&x[(11.5 * SR) as usize..]);
+        let width = correlation(&left, &right);
         let d2 = second_difference(&x);
         let typical = quantile(&d2, 0.999);
         // Steps and clicks show up as energy in the second difference; C7's own
@@ -104,14 +114,16 @@ fn render_all(dir: PathBuf) -> std::io::Result<()> {
             .map(|&(t, kind)| (click_score(&d2, typical, (t * SR) as usize, SR), (t, kind)))
             .fold((0.0f32, (0.0, "")), |a, b| if b.0 > a.0 { b } else { a });
         println!(
-            "{:<14} {:>7.1} {:>7.1} {:>8.5} {:>7.1} {:>8.1} {:>9.2}  {:.2} s note-{}{}",
+            "{:<14} {:>7.1} {:>7.1} {:>8.5} {:>7.1} {:>8.1} {:>6.2} {:>9.2} {:>6.2}  {:.2} s note-{}{}",
             name,
             db(peak(&x)),
-            db(rms(&active)),
+            loud,
             dc,
             db(tail),
             hf,
+            width,
             worst,
+            suggested,
             at.0,
             at.1,
             if nan { "  NaN!" } else { "" }
@@ -149,7 +161,7 @@ fn loopback(seconds: f32, path: PathBuf) -> Result<(), String> {
     std::thread::sleep(std::time::Duration::from_secs_f32(seconds));
     drop(stream);
     let x = recorded.lock().unwrap().clone();
-    write_wav(&path, &x, rate).map_err(|e| e.to_string())?;
+    write_wav(&path, &[&x], rate).map_err(|e| e.to_string())?;
     spectrogram_png(&path.with_extension("png"), &x, rate as f32, &[]).map_err(|e| e.to_string())?;
 
     let expected = (seconds * rate as f32) as usize;
@@ -196,7 +208,7 @@ fn main() {
             // C7 part of a preset, as max / median.
             let index: usize = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(10);
             let (name, patch) = synth_core::presets::factory().swap_remove(index - 1);
-            let x = render(&patch);
+            let (_, _, x) = render(&patch);
             let d2 = second_difference(&x[(6.9 * SR) as usize..(7.5 * SR) as usize]);
             let per_ms: Vec<f32> = d2.chunks(48).map(|c| c.iter().fold(0.0f32, |m, v| m.max(*v))).collect();
             let median = quantile(&per_ms, 0.5);

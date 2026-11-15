@@ -179,3 +179,24 @@ pub fn mini_bar(ui: &mut egui::Ui, label: &str, value: f32) {
     let filled = Rect::from_min_size(rect.min, Vec2::new(rect.width() * value.clamp(0.0, 1.0), rect.height()));
     painter.rect_filled(filled, 2.0, th.accent);
 }
+
+/// On/off switch with a label; returns true when flipped.
+pub fn toggle(ui: &mut egui::Ui, on: &mut bool, label: &str) -> bool {
+    ui.horizontal(|ui| {
+        let th = theme::t();
+        let (rect, response) = ui.allocate_exact_size(Vec2::new(30.0, 16.0), Sense::click());
+        let painter = ui.painter_at(rect);
+        let t = ui.ctx().animate_bool(response.id, *on);
+        let track = if *on { th.accent_dark } else { th.track };
+        painter.rect_filled(rect, 8.0, track);
+        let x = egui::lerp(rect.left() + 8.0..=rect.right() - 8.0, t);
+        painter.circle_filled(Pos2::new(x, rect.center().y), 6.0, if *on { th.pointer } else { th.muted });
+        let text = ui.add(egui::Label::new(egui::RichText::new(label).size(12.0).color(if *on { th.text } else { th.muted })).sense(Sense::click()));
+        let clicked = response.clicked() || text.clicked();
+        if clicked {
+            *on = !*on;
+        }
+        clicked
+    })
+    .inner
+}

@@ -42,7 +42,8 @@ fn build<T: SizedSample + FromSample<f32>>(
     let channels = config.channels.max(1) as usize;
     let mut engine = Engine::new(config.sample_rate as f32);
     // Grown on the first callback only, then reused.
-    let mut mono: Vec<f32> = Vec::with_capacity(8192);
+    let mut left: Vec<f32> = Vec::with_capacity(8192);
+    let mut right: Vec<f32> = Vec::with_capacity(8192);
     device
         .build_output_stream(
             config,
@@ -51,16 +52,26 @@ fn build<T: SizedSample + FromSample<f32>>(
                     engine.handle(event);
                 }
                 let frames = data.len() / channels;
-                if mono.len() < frames {
-                    mono.resize(frames, 0.0);
+                if left.len() < frames {
+                    left.resize(frames, 0.0);
+                    right.resize(frames, 0.0);
                 }
-                let block = &mut mono[..frames];
-                engine.render(block);
+                let (l, r) = (&mut left[..frames], &mut right[..frames]);
+                engine.render_stereo(l, r);
                 let mut peak = 0.0f32;
-                for (frame, &v) in data.chunks_exact_mut(channels).zip(block.iter()) {
-                    let v = v.clamp(-1.0, 1.0);
-                    peak = peak.max(v.abs());
-                    frame.fill(T::from_sample(v));
+                for (i, frame) in data.chunks_exact_mut(channels).enumerate() {
+                    let (a, b) = (l[i].clamp(-1.0, 1.0), r[i].clamp(-1.0, 1.0));
+                    peak = peak.max(a.abs()).max(b.abs());
+                    match frame {
+                        [mono] => *mono = T::from_sample(0.5 * (a + b)),
+                        [fl, fr, rest @ ..] => {
+                            *fl = T::from_sample(a);
+                            *fr = T::from_sample(b);
+                            // Surround channels stay silent.
+                            rest.fill(T::from_sample(0.0));
+                        }
+                        [] => {}
+                    }
                 }
                 status.report_audio(engine.active_voices(), peak, engine.held_notes(), engine.lfo_value());
             },

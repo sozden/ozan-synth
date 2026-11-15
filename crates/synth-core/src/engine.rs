@@ -1,5 +1,6 @@
 //! Polyphonic engine: voice allocation, events and mixing.
 
+use crate::effects::Effects;
 use crate::lfo::Lfo;
 use crate::patch::{Patch, MOD_OCTAVES};
 use crate::voice::{Modulation, Voice};
@@ -28,6 +29,8 @@ pub enum Event {
     ModWheel(f32),
     /// Channel pressure, 0..1; acts like the mod wheel.
     Aftertouch(f32),
+    /// Cuts reverb and echo tails at once (the panel's panic button).
+    ClearEffects,
     /// MIDI program change; handled by the application, not the engine.
     ProgramChange(u8),
     AllNotesOff,
@@ -39,6 +42,7 @@ pub struct Engine {
     sample_rate: f32,
     voices: [Voice; MAX_VOICES],
     patch: Patch,
+    effects: Effects,
     /// Smoothed volume and cutoff (log2 Hz), so turning a knob does not crackle.
     gain: f32,
     log_cutoff: f32,
@@ -59,6 +63,7 @@ impl Engine {
         Self {
             sample_rate,
             voices: Default::default(),
+            effects: Effects::new(sample_rate, &patch.fx),
             gain: patch.volume,
             log_cutoff: patch.filter.cutoff.log2(),
             patch,
@@ -105,6 +110,7 @@ impl Engine {
             Event::ModWheel(v) => self.wheel = v.clamp(0.0, 1.0),
             Event::Aftertouch(v) => self.aftertouch = v.clamp(0.0, 1.0),
             Event::ProgramChange(_) => {}
+            Event::ClearEffects => self.effects.clear(),
             Event::AllNotesOff => {
                 self.pedal = false;
                 for v in &mut self.voices {
@@ -179,25 +185,52 @@ impl Engine {
         }
     }
 
-    /// Fills `out` (mono) with the next samples.
+    /// Silences effect tails (reverb, echoes) at once.
+    pub fn clear_effects(&mut self) {
+        self.effects.clear();
+    }
+
+    /// Fills `left` and `right` (same length) with the next samples.
+    pub fn render_stereo(&mut self, left: &mut [f32], right: &mut [f32]) {
+        debug_assert_eq!(left.len(), right.len());
+        for (l, r) in left.chunks_mut(BLOCK).zip(right.chunks_mut(BLOCK)) {
+            self.render_block(l, r);
+        }
+    }
+
+    /// Fills `out` with the next samples, left and right mixed (for tests and tools).
     pub fn render(&mut self, out: &mut [f32]) {
-        out.fill(0.0);
+        for chunk in out.chunks_mut(BLOCK) {
+            let mut r = [0.0f32; BLOCK];
+            let r = &mut r[..chunk.len()];
+            self.render_block(chunk, r);
+            for (l, r) in chunk.iter_mut().zip(r.iter()) {
+                *l = 0.5 * (*l + *r);
+            }
+        }
+    }
+
+    /// At most [`BLOCK`] samples.
+    fn render_block(&mut self, left: &mut [f32], right: &mut [f32]) {
+        let n = left.len();
+        let mut mono = [0.0f32; BLOCK];
+        let mono = &mut mono[..n];
         // About 10 ms smoothing.
         let k = 1.0 - (-(BLOCK as f32) / (0.01 * self.sample_rate)).exp();
         let target_cutoff = self.patch.filter.cutoff.max(1.0).log2();
-        for block in out.chunks_mut(BLOCK) {
-            self.gain += (self.patch.volume - self.gain) * k;
-            self.log_cutoff += (target_cutoff - self.log_cutoff) * k;
-            let cutoff = self.log_cutoff.exp2();
-            let modulation = self.modulation(block.len());
-            for v in &mut self.voices {
-                v.render_add(block, &self.patch, &modulation, cutoff, self.sample_rate);
-            }
-            let gain = VOICE_GAIN * self.gain;
-            for s in block {
-                // Gentle saturation instead of hard clipping on loud chords.
-                *s = (*s * gain).tanh();
-            }
+        self.gain += (self.patch.volume - self.gain) * k;
+        self.log_cutoff += (target_cutoff - self.log_cutoff) * k;
+        let cutoff = self.log_cutoff.exp2();
+        let modulation = self.modulation(n);
+        for v in &mut self.voices {
+            v.render_add(mono, &self.patch, &modulation, cutoff, self.sample_rate);
+        }
+        let gain = self.gain;
+        for i in 0..n {
+            let (l, r) = self.effects.process(mono[i] * VOICE_GAIN, &self.patch.fx);
+            // Gentle saturation instead of hard clipping on loud chords.
+            left[i] = (l * gain).tanh();
+            right[i] = (r * gain).tanh();
         }
     }
 }

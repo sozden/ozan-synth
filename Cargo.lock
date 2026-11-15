@@ -3308,7 +3308,7 @@ dependencies = [
 
 [[package]]
 name = "synth-app"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "cpal",
  "eframe",
@@ -3321,14 +3321,14 @@ dependencies = [
 
 [[package]]
 name = "synth-core"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "synth-lab"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "cpal",
  "png",
