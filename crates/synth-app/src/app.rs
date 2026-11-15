@@ -10,6 +10,7 @@ use synth_core::{AdsrParams, Event, OscParams, Patch};
 use crate::audio::{self, AudioOutput};
 use crate::knob::{self, Knob};
 use crate::midi_in::{self, MidiConnection};
+use crate::settings::Settings;
 use crate::shared::{Events, Status};
 use crate::theme;
 use crate::widgets;
@@ -47,12 +48,17 @@ pub struct SynthApp {
     pc_octave: i32,
     pc_held: HashMap<Key, u8>,
     mouse_note: Option<u8>,
+    /// Recent peak (for the clip light) and the VU needle's level.
     meter: f32,
+    vu: f32,
+    settings: Settings,
 }
 
 impl SynthApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        theme::apply(&cc.egui_ctx);
+        let settings = Settings::load();
+        let theme = settings.get("theme").and_then(theme::index_of).unwrap_or(0);
+        theme::select(&cc.egui_ctx, theme);
         let status = Arc::new(Status::default());
         let (events, rx) = Events::new(1024);
         let audio = audio::open(rx, status.clone());
@@ -72,6 +78,8 @@ impl SynthApp {
             pc_held: HashMap::new(),
             mouse_note: None,
             meter: 0.0,
+            vu: 0.0,
+            settings,
         };
         app.events.send(Event::Patch(app.patch));
         app.scan_midi(true);
@@ -158,15 +166,32 @@ impl SynthApp {
 
     fn header(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
-            ui.label(RichText::new("SYNTH").size(20.0).strong().color(theme::ACCENT));
-            ui.label(RichText::new(format!("v{} · aşama 2", env!("CARGO_PKG_VERSION"))).color(theme::MUTED));
+            let th = theme::t();
+            if th.wood {
+                ui.label(RichText::new("Synth").size(26.0).italics().color(th.text));
+            } else {
+                ui.label(RichText::new("SYNTH").size(20.0).strong().color(th.accent));
+            }
+            ui.label(RichText::new(format!("v{}", env!("CARGO_PKG_VERSION"))).color(th.muted));
+            ui.add_space(16.0);
+            ui.label(RichText::new("Tema").color(th.muted));
+            let mut index = theme::current_index();
+            egui::ComboBox::from_id_salt("theme").selected_text(th.name).width(130.0).show_ui(ui, |ui| {
+                for (i, option) in theme::THEMES.iter().enumerate() {
+                    ui.selectable_value(&mut index, i, option.name);
+                }
+            });
+            if index != theme::current_index() {
+                theme::select(ui.ctx(), index);
+                self.settings.set("theme", theme::t().key);
+            }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| match &self.audio {
                 Ok(a) => {
-                    ui.label(RichText::new(format!("{} · {:.1} kHz", a.name, a.sample_rate as f32 / 1000.0)).color(theme::MUTED));
-                    widgets::led(ui, theme::GOOD);
+                    ui.label(RichText::new(format!("{} · {:.1} kHz", a.name, a.sample_rate as f32 / 1000.0)).color(theme::t().muted));
+                    widgets::led(ui, theme::t().good);
                 }
                 Err(e) => {
-                    ui.label(RichText::new(format!("Ses çıkışı açılamadı: {e}")).color(theme::HOT));
+                    ui.label(RichText::new(format!("Ses çıkışı açılamadı: {e}")).color(theme::t().hot));
                 }
             });
         });
@@ -197,10 +222,10 @@ impl SynthApp {
             if ui.button("⟳").on_hover_text("MIDI aygıtlarını yeniden ara").clicked() {
                 self.scan_midi(false);
             }
-            let glow = theme::GOOD.gamma_multiply(0.25 + 0.75 * self.midi_glow);
-            widgets::led(ui, if self.midi.is_some() { glow } else { theme::TRACK }).on_hover_text("MIDI mesajı geldikçe yanar");
+            let glow = theme::t().good.gamma_multiply(0.25 + 0.75 * self.midi_glow);
+            widgets::led(ui, if self.midi.is_some() { glow } else { theme::t().track }).on_hover_text("MIDI mesajı geldikçe yanar");
             if let Some(e) = &self.midi_error {
-                ui.label(RichText::new(e).color(theme::WARM));
+                ui.label(RichText::new(e).color(theme::t().warm));
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui.button("Tüm notaları sustur").clicked() {
@@ -238,12 +263,12 @@ impl SynthApp {
             theme::section(ui, "ÇIKIŞ", |ui| {
                 ui.horizontal(|ui| {
                     Knob::new("Ses", &mut p.volume, 0.0, 1.0).default_value(0.7).format(percent).show(ui);
-                    widgets::level_meter(ui, self.meter, Vec2::new(12.0, 92.0));
+                    widgets::vu_meter(ui, self.vu, self.meter, Vec2::new(136.0, 92.0));
                     ui.vertical(|ui| {
-                        ui.label(RichText::new("Ses sayısı").size(11.0).color(theme::MUTED));
+                        ui.label(RichText::new("Ses sayısı").size(11.0).color(theme::t().muted));
                         ui.label(RichText::new(format!("{} / {}", self.status.voices(), synth_core::MAX_VOICES)).monospace().size(16.0));
                         ui.add_space(8.0);
-                        if ui.button("Varsayılan ses").on_hover_text("Tüm ayarları başlangıç değerine döndürür").clicked() {
+                        if ui.button("Varsayılan").on_hover_text("Tüm ayarları başlangıç değerine döndürür").clicked() {
                             *p = Patch::default();
                         }
                     });
@@ -259,9 +284,9 @@ impl SynthApp {
         let held = self.status.held_notes();
         let names: Vec<String> = (0..128u8).filter(|n| held & (1u128 << n) != 0).map(synth_core::note_name).collect();
         ui.horizontal(|ui| {
-            ui.label(RichText::new(format!("Bilgisayar klavyesi: A W S E D F T G Y H U J K · Z/X oktav (A = C{})", self.pc_octave)).size(12.0).color(theme::MUTED));
+            ui.label(RichText::new(format!("Bilgisayar klavyesi: A W S E D F T G Y H U J K · Z/X oktav (A = C{})", self.pc_octave)).size(12.0).color(theme::t().muted));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.label(RichText::new(if names.is_empty() { "—".to_string() } else { names.join(" ") }).monospace().color(theme::ACCENT));
+                ui.label(RichText::new(if names.is_empty() { "—".to_string() } else { names.join(" ") }).monospace().color(theme::t().accent));
             });
         });
         ui.add_space(4.0);
@@ -329,7 +354,7 @@ fn envelope(ui: &mut egui::Ui, env: &mut AdsrParams) {
         Knob::new("Sustain", &mut env.sustain, 0.0, 1.0).format(percent).show(ui);
         Knob::new("Release", &mut env.release, 0.005, 8.0).log().format(seconds).show(ui);
         ui.add_space(8.0);
-        widgets::envelope_graph(ui, env.attack, env.decay, env.sustain, env.release, Vec2::new(150.0, 92.0));
+        widgets::envelope_graph(ui, env.attack, env.decay, env.sustain, env.release, Vec2::new(118.0, 92.0));
     });
 }
 
@@ -349,8 +374,18 @@ impl eframe::App for SynthApp {
         self.midi_glow = (self.midi_glow - 0.08).max(0.0);
         let peak = self.status.take_peak();
         self.meter = peak.max(self.meter * 0.85);
+        // VU ballistics: the needle needs about 300 ms to settle (per 16 ms frame).
+        self.vu += (peak - self.vu) * 0.12;
 
-        let pad = egui::Frame::new().fill(theme::BG).inner_margin(egui::Margin::same(14));
+        if theme::t().wood {
+            for (id, left) in [("wood_left", true), ("wood_right", false)] {
+                let panel = if left { egui::Panel::left(id) } else { egui::Panel::right(id) };
+                panel.exact_size(26.0).resizable(false).show_separator_line(false).frame(egui::Frame::new()).show(ui, |ui| {
+                    theme::paint_wood(ui.painter(), ui.max_rect());
+                });
+            }
+        }
+        let pad = egui::Frame::new().fill(theme::t().bg).inner_margin(egui::Margin::same(14));
         egui::Panel::top("header").frame(pad).show(ui, |ui| self.header(ui));
         egui::Panel::bottom("keys").frame(pad).show(ui, |ui| self.keyboard(ui));
         egui::CentralPanel::default().frame(pad).show(ui, |ui| self.panel(ui));

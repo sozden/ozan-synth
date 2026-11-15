@@ -15,7 +15,8 @@ Play it with a USB MIDI keyboard, the computer keyboard or the mouse.
 - Gentle output saturation instead of hard clipping
 - USB MIDI input (all channels): notes, velocity, sustain pedal, pitch bend (±2 semitones), all-notes-off
 - MIDI keyboards are found and connected automatically
-- Panel with knobs (drag up/down, Shift for fine, double-click for default, mouse wheel), envelope graph, level meter
+- Panel with knobs (drag up/down, Shift for fine, double-click for default, mouse wheel), envelope graphs, analogue VU meter
+- Two looks, chosen in the header and remembered: **Studio** (1970s style — wooden end cheeks, skirted knobs, cream lettering) and **Night** (dark cards with screws)
 - On-screen keyboard (C2–C7) that also shows the notes coming from MIDI
 - Computer keyboard: `A W S E D F T G Y H U J K O L`, `Z`/`X` change octave
 

@@ -6,6 +6,7 @@ mod app;
 mod audio;
 mod knob;
 mod midi_in;
+mod settings;
 mod shared;
 mod theme;
 mod widgets;
