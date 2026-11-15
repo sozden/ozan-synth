@@ -1,12 +1,10 @@
 //! Polyphonic engine: voice allocation, events and mixing.
 
-use crate::patch::Patch;
-use crate::voice::Voice;
+use crate::lfo::Lfo;
+use crate::patch::{Patch, MOD_OCTAVES};
+use crate::voice::{Modulation, Voice};
 
 pub const MAX_VOICES: usize = 16;
-
-/// Pitch-bend range in semitones (each way).
-const BEND_RANGE: f32 = 2.0;
 
 /// Mix level per voice, leaves headroom for chords.
 const VOICE_GAIN: f32 = 0.2;
@@ -21,8 +19,14 @@ pub enum Event {
     NoteOn { note: u8, velocity: u8 },
     NoteOff { note: u8 },
     SustainPedal(bool),
-    /// -1..1, scaled to ±[`BEND_RANGE`] semitones.
+    /// -1..1, scaled to ± the patch's bend range.
     PitchBend(f32),
+    /// Mod wheel (CC 1), 0..1.
+    ModWheel(f32),
+    /// Channel pressure, 0..1; acts like the mod wheel.
+    Aftertouch(f32),
+    /// MIDI program change; handled by the application, not the engine.
+    ProgramChange(u8),
     AllNotesOff,
     /// New sound settings.
     Patch(Patch),
@@ -35,7 +39,13 @@ pub struct Engine {
     /// Smoothed volume and cutoff (log2 Hz), so turning a knob does not crackle.
     gain: f32,
     log_cutoff: f32,
+    /// Pitch bend -1..1.
     bend: f32,
+    wheel: f32,
+    aftertouch: f32,
+    lfo: Lfo,
+    /// Last LFO value, for the interface's light.
+    lfo_value: f32,
     pedal: bool,
     counter: u64,
 }
@@ -50,6 +60,10 @@ impl Engine {
             log_cutoff: patch.filter.cutoff.log2(),
             patch,
             bend: 0.0,
+            wheel: 0.0,
+            aftertouch: 0.0,
+            lfo: Lfo::default(),
+            lfo_value: 0.0,
             pedal: false,
             counter: 0,
         }
@@ -84,7 +98,10 @@ impl Engine {
                     }
                 }
             }
-            Event::PitchBend(b) => self.bend = b.clamp(-1.0, 1.0) * BEND_RANGE,
+            Event::PitchBend(b) => self.bend = b.clamp(-1.0, 1.0),
+            Event::ModWheel(v) => self.wheel = v.clamp(0.0, 1.0),
+            Event::Aftertouch(v) => self.aftertouch = v.clamp(0.0, 1.0),
+            Event::ProgramChange(_) => {}
             Event::AllNotesOff => {
                 self.pedal = false;
                 for v in &mut self.voices {
@@ -136,6 +153,25 @@ impl Engine {
         }
     }
 
+    /// LFO value of the last block, -1..1.
+    pub fn lfo_value(&self) -> f32 {
+        self.lfo_value
+    }
+
+    /// Modulation for the next `samples`, from the LFO, wheel, aftertouch and bend.
+    fn modulation(&mut self, samples: usize) -> Modulation {
+        let p = &self.patch;
+        let lfo = self.lfo.advance(p.lfo.wave, p.lfo.rate, samples as f32 / self.sample_rate);
+        self.lfo_value = lfo;
+        let wheel = self.wheel.max(self.aftertouch);
+        Modulation {
+            pitch: self.bend * p.bend_range + lfo * (p.lfo.pitch + wheel * p.wheel.vibrato),
+            cutoff_octaves: (lfo * p.lfo.cutoff + wheel * p.wheel.cutoff) * MOD_OCTAVES,
+            // Tremolo dips the level from full down to (1 - depth).
+            amp: 1.0 - p.lfo.amp * 0.5 * (1.0 - lfo),
+        }
+    }
+
     /// Fills `out` (mono) with the next samples.
     pub fn render(&mut self, out: &mut [f32]) {
         out.fill(0.0);
@@ -146,8 +182,9 @@ impl Engine {
             self.gain += (self.patch.volume - self.gain) * k;
             self.log_cutoff += (target_cutoff - self.log_cutoff) * k;
             let cutoff = self.log_cutoff.exp2();
+            let modulation = self.modulation(block.len());
             for v in &mut self.voices {
-                v.render_add(block, &self.patch, self.bend, cutoff, self.sample_rate);
+                v.render_add(block, &self.patch, &modulation, cutoff, self.sample_rate);
             }
             let gain = VOICE_GAIN * self.gain;
             for s in block {
@@ -243,5 +280,79 @@ mod tests {
         // Saturation keeps even 16 loud voices inside the -1..1 range.
         let p = peak(&mut e, 48_000);
         assert!(p.is_finite() && p < 1.0, "{p}");
+    }
+}
+
+#[cfg(test)]
+mod modulation_tests {
+    use super::*;
+    use crate::lfo::LfoWave;
+    use crate::oscillator::Waveform;
+    use crate::patch::{LfoParams, OscParams};
+
+    const SR: f32 = 48_000.0;
+
+    fn rising_crossings(x: &[f32]) -> usize {
+        x.windows(2).filter(|w| w[0] < 0.0 && w[1] >= 0.0).count()
+    }
+
+    /// A plain sine through an open filter.
+    fn sine_patch() -> Patch {
+        let mut p = Patch::default();
+        p.osc[0] = OscParams { wave: Waveform::Sine, octave: 0, semitones: 0, fine: 0.0, level: 1.0 };
+        p.osc[1].level = 0.0;
+        p.filter.cutoff = 20_000.0;
+        p.filter.env_amount = 0.0;
+        p.amp_env.sustain = 1.0;
+        p
+    }
+
+    #[test]
+    fn square_lfo_vibrato_jumps_an_octave() {
+        let mut e = Engine::new(SR);
+        let mut p = sine_patch();
+        p.lfo = LfoParams { wave: LfoWave::Square, rate: 1.0, pitch: 12.0, cutoff: 0.0, amp: 0.0 };
+        e.handle(Event::Patch(p));
+        e.handle(Event::NoteOn { note: 57, velocity: 100 }); // 220 Hz
+        let mut buf = vec![0.0; SR as usize];
+        e.render(&mut buf);
+        // First half of the LFO cycle is +1 (an octave up), the second half -1.
+        let high = rising_crossings(&buf[4_800..19_200]) as f32 / 0.3;
+        let low = rising_crossings(&buf[28_800..43_200]) as f32 / 0.3;
+        assert!((high - 440.0).abs() < 10.0, "{high}");
+        assert!((low - 110.0).abs() < 10.0, "{low}");
+    }
+
+    #[test]
+    fn bend_uses_patch_range_and_wheel_adds_vibrato() {
+        let mut e = Engine::new(SR);
+        let mut p = sine_patch();
+        p.bend_range = 12.0;
+        e.handle(Event::Patch(p));
+        e.handle(Event::PitchBend(1.0));
+        e.handle(Event::NoteOn { note: 57, velocity: 100 });
+        let mut buf = vec![0.0; 24_000];
+        e.render(&mut buf);
+        let f = rising_crossings(&buf[4_800..]) as f32 / 0.4;
+        assert!((f - 440.0).abs() < 10.0, "{f}");
+
+        // Without LFO depth the wheel alone adds the patch's vibrato.
+        assert_eq!(e.modulation(32).pitch, 12.0);
+        e.handle(Event::ModWheel(1.0));
+        let pitches: Vec<f32> = (0..3000).map(|_| e.modulation(32).pitch).collect();
+        let spread = pitches.iter().cloned().fold(f32::MIN, f32::max) - pitches.iter().cloned().fold(f32::MAX, f32::min);
+        assert!((spread - 2.0 * p.wheel.vibrato).abs() < 0.05, "{spread}");
+    }
+
+    #[test]
+    fn tremolo_stays_between_full_and_depth() {
+        let mut e = Engine::new(SR);
+        let mut p = Patch::default();
+        p.lfo.amp = 0.4;
+        e.handle(Event::Patch(p));
+        let amps: Vec<f32> = (0..3000).map(|_| e.modulation(32).amp).collect();
+        let max = amps.iter().cloned().fold(f32::MIN, f32::max);
+        let min = amps.iter().cloned().fold(f32::MAX, f32::min);
+        assert!(max <= 1.0 && max > 0.99 && (min - 0.6).abs() < 0.01, "{min}..{max}");
     }
 }

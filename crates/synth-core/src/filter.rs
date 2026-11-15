@@ -5,6 +5,7 @@
 use std::f32::consts::PI;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum FilterMode {
     /// Low-pass, 12 dB per octave.
     Lp12,

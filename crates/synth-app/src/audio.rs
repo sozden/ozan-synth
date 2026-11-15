@@ -62,7 +62,7 @@ fn build<T: SizedSample + FromSample<f32>>(
                     peak = peak.max(v.abs());
                     frame.fill(T::from_sample(v));
                 }
-                status.report_audio(engine.active_voices(), peak, engine.held_notes());
+                status.report_audio(engine.active_voices(), peak, engine.held_notes(), engine.lfo_value());
             },
             |e| eprintln!("ses: {e}"),
             None,

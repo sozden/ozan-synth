@@ -14,11 +14,14 @@ pub fn parse(message: &[u8]) -> Option<Event> {
             velocity => Some(Event::NoteOn { note: d1?, velocity }),
         },
         0xB0 => match d1? {
+            1 => Some(Event::ModWheel(d2? as f32 / 127.0)),
             64 => Some(Event::SustainPedal(d2? >= 64)),
             // All sound off / all notes off.
             120 | 123 => Some(Event::AllNotesOff),
             _ => None,
         },
+        0xC0 => Some(Event::ProgramChange(d1?)),
+        0xD0 => Some(Event::Aftertouch(d1? as f32 / 127.0)),
         0xE0 => {
             let value = ((d2? as i32) << 7 | d1? as i32) - 8192;
             Some(Event::PitchBend(value as f32 / 8192.0))
@@ -44,7 +47,10 @@ mod tests {
         assert_eq!(parse(&[0xB0, 64, 127]), Some(Event::SustainPedal(true)));
         assert_eq!(parse(&[0xB0, 64, 0]), Some(Event::SustainPedal(false)));
         assert_eq!(parse(&[0xB0, 123, 0]), Some(Event::AllNotesOff));
-        assert_eq!(parse(&[0xB0, 1, 50]), None);
+        assert_eq!(parse(&[0xB0, 7, 50]), None);
+        assert_eq!(parse(&[0xB0, 1, 127]), Some(Event::ModWheel(1.0)));
+        assert_eq!(parse(&[0xD2, 0]), Some(Event::Aftertouch(0.0)));
+        assert_eq!(parse(&[0xC0, 5]), Some(Event::ProgramChange(5)));
     }
 
     #[test]

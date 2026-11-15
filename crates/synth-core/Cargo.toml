@@ -6,6 +6,10 @@ edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
-# Kept free of dependencies on purpose: the same engine is meant to run in the
-# standalone app and, later, in a plugin.
+# No required dependencies: the same engine is meant to run in the standalone
+# app and, later, in a plugin. `serde` (optional) reads and writes patches.
 [dependencies]
+serde = { version = "1", features = ["derive"], optional = true }
+
+[features]
+serde = ["dep:serde"]

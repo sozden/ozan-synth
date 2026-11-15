@@ -6,15 +6,18 @@
 pub mod engine;
 pub mod envelope;
 pub mod filter;
+pub mod lfo;
 pub mod midi;
 pub mod oscillator;
 pub mod patch;
+pub mod presets;
 pub mod voice;
 
 pub use engine::{Engine, Event, MAX_VOICES};
 pub use filter::FilterMode;
+pub use lfo::LfoWave;
 pub use oscillator::Waveform;
-pub use patch::{FilterParams, OscParams, Patch};
+pub use patch::{FilterParams, LfoParams, OscParams, Patch, WheelParams};
 pub use envelope::AdsrParams;
 
 /// Frequency in Hz of a (fractional) MIDI note number; 69 = A4 = 440 Hz.

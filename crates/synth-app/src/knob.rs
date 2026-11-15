@@ -3,7 +3,7 @@
 use std::f32::consts::PI;
 
 use eframe::egui::{self, Color32, Pos2, Rect, Sense, Stroke, Vec2};
-use synth_core::{FilterMode, Waveform};
+use synth_core::{FilterMode, LfoWave, Waveform};
 
 use crate::theme::{self, KnobStyle};
 
@@ -247,6 +247,36 @@ pub fn filter_mode_selector(ui: &mut egui::Ui, mode: &mut FilterMode) -> bool {
             FilterMode::Lp24 => "Alçak geçiren, 24 dB/oktav",
             FilterMode::BandPass => "Bant geçiren",
             FilterMode::HighPass => "Yüksek geçiren",
+        },
+    )
+}
+
+pub fn lfo_wave_selector(ui: &mut egui::Ui, wave: &mut LfoWave) -> bool {
+    choice_row(
+        ui,
+        wave,
+        &LfoWave::ALL,
+        Vec2::new(34.0, 26.0),
+        |painter, r, w, color| {
+            let r = r.shrink2(Vec2::new(8.0, 7.0));
+            let p = |t: f32, v: f32| Pos2::new(r.left() + t * r.width(), r.center().y - v * r.height() * 0.5);
+            let points: Vec<Pos2> = match w {
+                LfoWave::Sine => return paint_wave(painter, r, Waveform::Sine, color),
+                LfoWave::Triangle => return paint_wave(painter, r, Waveform::Triangle, color),
+                LfoWave::Square => return paint_wave(painter, r, Waveform::Square, color),
+                LfoWave::Saw => vec![p(0.0, -1.0), p(1.0, 1.0), p(1.0, -1.0)],
+                LfoWave::SampleHold => vec![
+                    p(0.0, 0.2), p(0.25, 0.2), p(0.25, -0.8), p(0.5, -0.8), p(0.5, 1.0), p(0.75, 1.0), p(0.75, -0.3), p(1.0, -0.3),
+                ],
+            };
+            painter.add(egui::Shape::line(points, Stroke::new(1.8, color)));
+        },
+        |w| match w {
+            LfoWave::Sine => "Sinüs",
+            LfoWave::Triangle => "Üçgen",
+            LfoWave::Saw => "Rampa",
+            LfoWave::Square => "Kare",
+            LfoWave::SampleHold => "Rastgele (sample & hold)",
         },
     )
 }

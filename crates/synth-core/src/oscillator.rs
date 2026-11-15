@@ -8,6 +8,7 @@
 use std::f32::consts::TAU;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Waveform {
     Sine,
     #[default]

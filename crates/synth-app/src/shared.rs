@@ -33,10 +33,17 @@ pub struct Status {
     peak: AtomicU32,
     held: [AtomicU64; 2],
     midi_messages: AtomicU32,
+    /// Controllers as f32 bits, for the panel's displays.
+    wheel: AtomicU32,
+    aftertouch: AtomicU32,
+    lfo: AtomicU32,
+    /// Program change waiting for the interface, plus one (0 = none).
+    program: AtomicU32,
 }
 
 impl Status {
-    pub fn report_audio(&self, voices: usize, peak: f32, held: u128) {
+    pub fn report_audio(&self, voices: usize, peak: f32, held: u128, lfo: f32) {
+        self.lfo.store(lfo.to_bits(), Ordering::Relaxed);
         self.voices.store(voices as u32, Ordering::Relaxed);
         self.peak.fetch_max(peak.abs().to_bits(), Ordering::Relaxed);
         self.held[0].store(held as u64, Ordering::Relaxed);
@@ -62,5 +69,37 @@ impl Status {
 
     pub fn midi_messages(&self) -> u32 {
         self.midi_messages.load(Ordering::Relaxed)
+    }
+
+    pub fn set_wheel(&self, v: f32) {
+        self.wheel.store(v.to_bits(), Ordering::Relaxed);
+    }
+
+    pub fn set_aftertouch(&self, v: f32) {
+        self.aftertouch.store(v.to_bits(), Ordering::Relaxed);
+    }
+
+    pub fn wheel(&self) -> f32 {
+        f32::from_bits(self.wheel.load(Ordering::Relaxed))
+    }
+
+    pub fn aftertouch(&self) -> f32 {
+        f32::from_bits(self.aftertouch.load(Ordering::Relaxed))
+    }
+
+    pub fn lfo(&self) -> f32 {
+        f32::from_bits(self.lfo.load(Ordering::Relaxed))
+    }
+
+    pub fn request_program(&self, program: u8) {
+        self.program.store(program as u32 + 1, Ordering::Relaxed);
+    }
+
+    /// Program change received since the previous call.
+    pub fn take_program(&self) -> Option<u8> {
+        match self.program.swap(0, Ordering::Relaxed) {
+            0 => None,
+            p => Some((p - 1) as u8),
+        }
     }
 }

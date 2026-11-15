@@ -10,6 +10,7 @@ use synth_core::{AdsrParams, Event, OscParams, Patch};
 use crate::audio::{self, AudioOutput};
 use crate::knob::{self, Knob};
 use crate::midi_in::{self, MidiConnection};
+use crate::presets::{self, Preset};
 use crate::settings::Settings;
 use crate::shared::{Events, Status};
 use crate::theme;
@@ -43,6 +44,13 @@ pub struct SynthApp {
     midi_glow: f32,
 
     patch: Patch,
+    presets: Vec<Preset>,
+    /// Preset the patch came from (it may have been changed since).
+    current: Option<usize>,
+    /// Name being typed while the save window is open.
+    save_name: Option<String>,
+    confirm_delete: bool,
+    preset_note: Option<String>,
 
     /// Octave of the computer keyboard's A key (4 → C4).
     pc_octave: i32,
@@ -80,8 +88,15 @@ impl SynthApp {
             meter: 0.0,
             vu: 0.0,
             settings,
+            presets: Vec::new(),
+            current: None,
+            save_name: None,
+            confirm_delete: false,
+            preset_note: None,
         };
-        app.events.send(Event::Patch(app.patch));
+        let last = app.settings.get("preset").map(str::to_string);
+        app.reload_presets(last.as_deref());
+        app.select_preset(app.current.unwrap_or(0));
         app.scan_midi(true);
         app
     }
@@ -164,6 +179,158 @@ impl SynthApp {
         }
     }
 
+    fn reload_presets(&mut self, select: Option<&str>) {
+        let (list, problems) = presets::load_all();
+        self.presets = list;
+        self.preset_note = problems.first().map(|p| format!("Okunamayan preset: {p}"));
+        self.current = select.and_then(|name| self.presets.iter().position(|p| p.name == name));
+    }
+
+    fn select_preset(&mut self, index: usize) {
+        let Some(preset) = self.presets.get(index) else { return };
+        self.patch = preset.patch;
+        self.current = Some(index);
+        let name = preset.name.clone();
+        self.events.send(Event::Patch(self.patch));
+        self.settings.set("preset", &name);
+    }
+
+    fn step_preset(&mut self, step: isize) {
+        let n = self.presets.len() as isize;
+        if n > 0 {
+            let i = self.current.map_or(0, |c| (c as isize + step).rem_euclid(n));
+            self.select_preset(i as usize);
+        }
+    }
+
+    /// The patch differs from the preset it was loaded from.
+    fn modified(&self) -> bool {
+        self.current.is_none_or(|i| self.presets[i].patch != self.patch)
+    }
+
+    fn preset_bar(&mut self, ui: &mut egui::Ui) {
+        let th = theme::t();
+        if ui.button("◀").on_hover_text("Önceki preset").clicked() {
+            self.step_preset(-1);
+        }
+        let shown = match self.current {
+            Some(i) => format!("{:02}  {}{}", i + 1, self.presets[i].name, if self.modified() { " *" } else { "" }),
+            None => "—  kaydedilmemiş ses".to_string(),
+        };
+        let mut chosen = None;
+        egui::ComboBox::from_id_salt("preset")
+            .selected_text(RichText::new(shown).monospace().color(th.accent))
+            .width(230.0)
+            .height(480.0)
+            .show_ui(ui, |ui| {
+                let factory = self.presets.iter().filter(|p| p.file.is_none()).count();
+                for (i, preset) in self.presets.iter().enumerate() {
+                    if i == factory {
+                        ui.separator();
+                        ui.label(RichText::new("Senin preset'lerin").size(11.0).color(th.muted));
+                    }
+                    if ui.selectable_label(self.current == Some(i), format!("{:02}  {}", i + 1, preset.name)).clicked() {
+                        chosen = Some(i);
+                    }
+                }
+            });
+        if let Some(i) = chosen {
+            self.select_preset(i);
+        }
+        if ui.button("▶").on_hover_text("Sonraki preset").clicked() {
+            self.step_preset(1);
+        }
+        if ui.button("Kaydet").on_hover_text("Şu anki sesi preset olarak kaydeder").clicked() {
+            let name = self.current.map(|i| self.presets[i].name.clone()).filter(|_| self.current.is_some_and(|i| self.presets[i].file.is_some()));
+            self.save_name = Some(name.unwrap_or_default());
+        }
+        let deletable = self.current.is_some_and(|i| self.presets[i].file.is_some());
+        if ui.add_enabled(deletable, egui::Button::new("Sil")).on_disabled_hover_text("Fabrika preset'leri silinemez").clicked() {
+            self.confirm_delete = true;
+        }
+        if let Some(note) = &self.preset_note {
+            ui.label(RichText::new(note).size(11.0).color(th.warm));
+        }
+    }
+
+    /// Save and delete windows.
+    fn preset_dialogs(&mut self, ctx: &egui::Context) {
+        if let Some(mut name) = self.save_name.take() {
+            let mut close = false;
+            let mut save = false;
+            let modal = egui::Modal::new(egui::Id::new("save_preset")).show(ctx, |ui| {
+                ui.set_width(320.0);
+                ui.heading("Preset kaydet");
+                ui.add_space(6.0);
+                let field = ui.add(egui::TextEdit::singleline(&mut name).hint_text("Preset adı").desired_width(f32::INFINITY));
+                field.request_focus();
+                let trimmed = name.trim();
+                if presets::path_for(trimmed).is_some_and(|p| p.exists()) && !trimmed.is_empty() {
+                    ui.label(RichText::new("Bu adda bir preset var; üzerine yazılacak.").size(11.0).color(theme::t().warm));
+                }
+                ui.add_space(6.0);
+                ui.horizontal(|ui| {
+                    let ok = !trimmed.is_empty();
+                    if ui.add_enabled(ok, egui::Button::new("Kaydet")).clicked() || (ok && ui.input(|i| i.key_pressed(Key::Enter))) {
+                        save = true;
+                    }
+                    if ui.button("Vazgeç").clicked() {
+                        close = true;
+                    }
+                });
+            });
+            if save {
+                let name = name.trim().to_string();
+                match presets::save(&name, &self.patch) {
+                    Ok(_) => {
+                        self.reload_presets(Some(&name));
+                        self.settings.set("preset", &name);
+                    }
+                    Err(e) => self.preset_note = Some(format!("Kaydedilemedi: {e}")),
+                }
+            } else if !close && !modal.should_close() {
+                self.save_name = Some(name);
+            }
+        }
+        if self.confirm_delete {
+            let Some(i) = self.current.filter(|&i| self.presets[i].file.is_some()) else {
+                self.confirm_delete = false;
+                return;
+            };
+            let name = self.presets[i].name.clone();
+            let mut answer = None;
+            let modal = egui::Modal::new(egui::Id::new("delete_preset")).show(ctx, |ui| {
+                ui.set_width(320.0);
+                ui.heading("Preset silinsin mi?");
+                ui.add_space(6.0);
+                ui.label(format!("“{name}” dosyası kalıcı olarak silinir; geri alınamaz."));
+                ui.add_space(6.0);
+                ui.horizontal(|ui| {
+                    if ui.button("Sil").clicked() {
+                        answer = Some(true);
+                    }
+                    if ui.button("Vazgeç").clicked() {
+                        answer = Some(false);
+                    }
+                });
+            });
+            if answer == Some(true) {
+                if let Some(file) = self.presets[i].file.clone() {
+                    match presets::delete(&file) {
+                        Ok(()) => {
+                            // The sound stays as it is; it just has no preset now.
+                            self.reload_presets(None);
+                        }
+                        Err(e) => self.preset_note = Some(format!("Silinemedi: {e}")),
+                    }
+                }
+            }
+            if answer.is_some() || modal.should_close() {
+                self.confirm_delete = false;
+            }
+        }
+    }
+
     fn header(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             let th = theme::t();
@@ -174,17 +341,7 @@ impl SynthApp {
             }
             ui.label(RichText::new(format!("v{}", env!("CARGO_PKG_VERSION"))).color(th.muted));
             ui.add_space(16.0);
-            ui.label(RichText::new("Tema").color(th.muted));
-            let mut index = theme::current_index();
-            egui::ComboBox::from_id_salt("theme").selected_text(th.name).width(130.0).show_ui(ui, |ui| {
-                for (i, option) in theme::THEMES.iter().enumerate() {
-                    ui.selectable_value(&mut index, i, option.name);
-                }
-            });
-            if index != theme::current_index() {
-                theme::select(ui.ctx(), index);
-                self.settings.set("theme", theme::t().key);
-            }
+            self.preset_bar(ui);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| match &self.audio {
                 Ok(a) => {
                     ui.label(RichText::new(format!("{} · {:.1} kHz", a.name, a.sample_rate as f32 / 1000.0)).color(theme::t().muted));
@@ -232,12 +389,27 @@ impl SynthApp {
                     self.release_pc_keys();
                     self.events.send(Event::AllNotesOff);
                 }
+                ui.add_space(12.0);
+                let th = theme::t();
+                let mut index = theme::current_index();
+                egui::ComboBox::from_id_salt("theme").selected_text(th.name).width(130.0).show_ui(ui, |ui| {
+                    for (i, option) in theme::THEMES.iter().enumerate() {
+                        ui.selectable_value(&mut index, i, option.name);
+                    }
+                });
+                ui.label(RichText::new("Tema").color(th.muted));
+                if index != theme::current_index() {
+                    theme::select(ui.ctx(), index);
+                    self.settings.set("theme", theme::t().key);
+                }
             });
         });
     }
 
     fn panel(&mut self, ui: &mut egui::Ui) {
         let before = self.patch;
+        let lfo_now = self.status.lfo();
+        let (wheel, aftertouch) = (self.status.wheel(), self.status.aftertouch());
         let p = &mut self.patch;
         ui.spacing_mut().item_spacing = Vec2::new(12.0, 12.0);
         ui.horizontal_top(|ui| {
@@ -272,6 +444,37 @@ impl SynthApp {
                             *p = Patch::default();
                         }
                     });
+                });
+            });
+        });
+        ui.horizontal_top(|ui| {
+            theme::section(ui, "LFO", |ui| {
+                ui.horizontal(|ui| {
+                    knob::lfo_wave_selector(ui, &mut p.lfo.wave);
+                    ui.add_space(6.0);
+                    let th = theme::t();
+                    widgets::led(ui, th.accent.gamma_multiply(0.12 + 0.88 * (0.5 + 0.5 * lfo_now))).on_hover_text("LFO'nun o anki değeri");
+                });
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = 2.0;
+                    let l = &mut p.lfo;
+                    Knob::new("Hız", &mut l.rate, 0.05, 20.0).log().default_value(5.0).format(rate).show(ui);
+                    Knob::new("Vibrato", &mut l.pitch, 0.0, 12.0).default_value(0.0).format(semitones).show(ui);
+                    Knob::new("Filtre", &mut l.cutoff, -1.0, 1.0).bipolar().default_value(0.0).format(signed_percent).show(ui);
+                    Knob::new("Tremolo", &mut l.amp, 0.0, 1.0).default_value(0.0).format(percent).show(ui);
+                });
+            });
+            theme::section(ui, "TEKERLEK · AFTERTOUCH · BEND", |ui| {
+                ui.horizontal(|ui| {
+                    widgets::mini_bar(ui, "Teker", wheel);
+                    ui.add_space(8.0);
+                    widgets::mini_bar(ui, "Aftertouch", aftertouch);
+                });
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = 2.0;
+                    Knob::new("Vibrato", &mut p.wheel.vibrato, 0.0, 2.0).default_value(0.5).format(semitones).show(ui);
+                    Knob::new("Filtre", &mut p.wheel.cutoff, -1.0, 1.0).bipolar().default_value(0.0).format(signed_percent).show(ui);
+                    Knob::new("Bend", &mut p.bend_range, 0.0, 12.0).integer().default_value(2.0).format(bend).show(ui);
                 });
             });
         });
@@ -314,6 +517,18 @@ fn seconds(v: f32) -> String {
 
 fn hertz(v: f32) -> String {
     if v < 1000.0 { format!("{v:.0} Hz") } else { format!("{:.2} kHz", v / 1000.0) }
+}
+
+fn rate(v: f32) -> String {
+    if v < 10.0 { format!("{v:.2} Hz") } else { format!("{v:.1} Hz") }
+}
+
+fn semitones(v: f32) -> String {
+    format!("{v:.2} yt")
+}
+
+fn bend(v: f32) -> String {
+    format!("±{} yt", v as i32)
 }
 
 fn signed_int(v: f32) -> String {
@@ -376,6 +591,12 @@ impl eframe::App for SynthApp {
         self.meter = peak.max(self.meter * 0.85);
         // VU ballistics: the needle needs about 300 ms to settle (per 16 ms frame).
         self.vu += (peak - self.vu) * 0.12;
+        if let Some(program) = self.status.take_program() {
+            if !self.presets.is_empty() {
+                self.select_preset(program as usize % self.presets.len());
+            }
+        }
+        self.preset_dialogs(&ctx);
 
         if theme::t().wood {
             for (id, left) in [("wood_left", true), ("wood_right", false)] {

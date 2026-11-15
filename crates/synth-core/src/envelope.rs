@@ -2,6 +2,7 @@
 
 /// Times in seconds, sustain as a level 0..1.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct AdsrParams {
     pub attack: f32,
     pub decay: f32,

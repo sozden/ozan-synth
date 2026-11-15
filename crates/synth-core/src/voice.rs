@@ -5,6 +5,23 @@ use crate::filter::Filter;
 use crate::oscillator::Oscillator;
 use crate::patch::{Patch, ENV_OCTAVES};
 
+/// Modulation shared by all voices for one block.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Modulation {
+    /// Semitones added to the pitch (bend, vibrato).
+    pub pitch: f32,
+    /// Octaves added to the cutoff.
+    pub cutoff_octaves: f32,
+    /// Level factor (tremolo), 0..1.
+    pub amp: f32,
+}
+
+impl Default for Modulation {
+    fn default() -> Self {
+        Self { pitch: 0.0, cutoff_octaves: 0.0, amp: 1.0 }
+    }
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct Voice {
     /// MIDI note the voice was last started with.
@@ -65,19 +82,19 @@ impl Voice {
         self.filter_env.kill();
     }
 
-    /// Adds this voice's output to `out`. `bend` is in semitones, `cutoff` the
-    /// (smoothed) base cutoff in Hz.
-    pub fn render_add(&mut self, out: &mut [f32], patch: &Patch, bend: f32, cutoff: f32, sample_rate: f32) {
+    /// Adds this voice's output to `out`. `cutoff` is the (smoothed) base cutoff in Hz.
+    pub fn render_add(&mut self, out: &mut [f32], patch: &Patch, m: &Modulation, cutoff: f32, sample_rate: f32) {
         if !self.is_active() {
             return;
         }
-        let note = self.note as f32 + bend;
+        let note = self.note as f32 + m.pitch;
         let [o1, o2] = &patch.osc;
         let f1 = crate::note_to_hz(note + o1.offset());
         let f2 = crate::note_to_hz(note + o2.offset());
         let f = &patch.filter;
-        let tracked = cutoff * (f.key_track * (note - 60.0) / 12.0).exp2();
+        let tracked = cutoff * (f.key_track * (self.note as f32 - 60.0) / 12.0 + m.cutoff_octaves).exp2();
         let amount = f.env_amount * ENV_OCTAVES;
+        let gain = self.velocity * m.amp;
         for s in out {
             let mut x = 0.0;
             if o1.level > 0.0 {
@@ -91,7 +108,7 @@ impl Voice {
             let y = self.filter.process(x, f.mode, fc, f.resonance, sample_rate);
             let ae = self.amp_env.next(&patch.amp_env, sample_rate);
             // Squared envelope sounds more even to the ear than a linear one.
-            *s += y * ae * ae * self.velocity;
+            *s += y * ae * ae * gain;
             if !self.amp_env.is_active() {
                 break;
             }

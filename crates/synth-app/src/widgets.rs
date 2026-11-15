@@ -168,3 +168,14 @@ pub fn led(ui: &mut egui::Ui, color: Color32) -> egui::Response {
     response
 }
 
+
+/// A labelled horizontal bar for a controller value (0..1).
+pub fn mini_bar(ui: &mut egui::Ui, label: &str, value: f32) {
+    let th = theme::t();
+    ui.label(egui::RichText::new(label).size(11.0).color(th.muted));
+    let (rect, _) = ui.allocate_exact_size(Vec2::new(56.0, 8.0), Sense::hover());
+    let painter = ui.painter_at(rect);
+    painter.rect_filled(rect, 2.0, th.screen);
+    let filled = Rect::from_min_size(rect.min, Vec2::new(rect.width() * value.clamp(0.0, 1.0), rect.height()));
+    painter.rect_filled(filled, 2.0, th.accent);
+}

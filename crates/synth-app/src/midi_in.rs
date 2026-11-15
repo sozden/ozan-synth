@@ -6,6 +6,7 @@
 use std::sync::Arc;
 
 use midir::{Ignore, MidiInput, MidiInputConnection};
+use synth_core::Event;
 
 use crate::shared::{Events, Status};
 
@@ -37,8 +38,18 @@ pub fn connect(name: &str, events: Events, status: Arc<Status>) -> Result<MidiCo
             "synth-in",
             move |_time, message, _| {
                 status.midi_received();
-                if let Some(event) = synth_core::midi::parse(message) {
-                    events.send(event);
+                match synth_core::midi::parse(message) {
+                    // Choosing a preset is the interface's job.
+                    Some(Event::ProgramChange(p)) => status.request_program(p),
+                    Some(event) => {
+                        match event {
+                            Event::ModWheel(v) => status.set_wheel(v),
+                            Event::Aftertouch(v) => status.set_aftertouch(v),
+                            _ => {}
+                        }
+                        events.send(event);
+                    }
+                    None => {}
                 }
             },
             (),

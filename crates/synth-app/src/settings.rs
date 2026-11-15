@@ -1,14 +1,19 @@
 //! Small settings kept between runs, as `key=value` lines in
-//! `%APPDATA%\Synth\settings.txt` (`~/.config/synth` elsewhere).
+//! `%APPDATA%\Synth\settings.txt` (`~/.config/Synth` elsewhere).
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-fn path() -> Option<PathBuf> {
+/// Folder of the program's own files.
+pub fn dir() -> Option<PathBuf> {
     let base = std::env::var_os("APPDATA")
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))?;
-    Some(base.join("Synth").join("settings.txt"))
+    Some(base.join("Synth"))
+}
+
+fn path() -> Option<PathBuf> {
+    Some(dir()?.join("settings.txt"))
 }
 
 #[derive(Default)]
