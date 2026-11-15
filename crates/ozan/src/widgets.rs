@@ -118,7 +118,7 @@ pub fn piano(ui: &mut egui::Ui, low: u8, high: u8, lit: u128, mouse_note: &mut O
             painter.text(
                 Pos2::new(r.center().x, r.bottom() - 10.0),
                 egui::Align2::CENTER_CENTER,
-                synth_core::note_name(n),
+                ozan_core::note_name(n),
                 egui::FontId::proportional(10.0),
                 Color32::from_gray(110),
             );

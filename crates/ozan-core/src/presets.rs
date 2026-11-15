@@ -1,6 +1,6 @@
 //! Factory presets: one example of each classic sound the engine can make.
 //!
-//! Volumes are matched by measurement (`synth-lab render`) so that switching
+//! Volumes are matched by measurement (`ozan-lab render`) so that switching
 //! presets does not jump in loudness: about -25 dB RMS while the test phrase
 //! plays (short plucks a little lower, judged by their peaks).
 
@@ -52,9 +52,9 @@ pub fn factory() -> Vec<(&'static str, Patch)> {
     use Waveform::*;
     let d = Patch::default();
     vec![
-        ("Başlangıç", Patch { volume: 0.88, ..d }),
+        ("Init", Patch { volume: 0.88, ..d }),
         (
-            "Acid bas",
+            "Acid Bass",
             Patch {
                 osc: [osc(Square, -1, 0, 0.0, 1.0), OFF],
                 filter: filter(Lp24, 180.0, 0.82, 0.55, 0.3),
@@ -65,7 +65,7 @@ pub fn factory() -> Vec<(&'static str, Patch)> {
             },
         ),
         (
-            "Kalın bas",
+            "Fat Bass",
             Patch {
                 osc: [osc(Saw, -1, 0, 0.0, 0.8), osc(Square, -2, 0, 0.0, 0.6)],
                 filter: filter(Lp24, 300.0, 0.2, 0.35, 0.3),
@@ -76,7 +76,7 @@ pub fn factory() -> Vec<(&'static str, Patch)> {
             },
         ),
         (
-            "Wobble bas",
+            "Wobble Bass",
             Patch {
                 osc: [osc(Saw, -1, 0, 0.0, 0.8), osc(Square, -1, 0, 10.0, 0.6)],
                 filter: filter(Lp24, 220.0, 0.6, 0.1, 0.2),
@@ -87,7 +87,7 @@ pub fn factory() -> Vec<(&'static str, Patch)> {
             },
         ),
         (
-            "Yumuşak pad",
+            "Soft Pad",
             Patch {
                 osc: [osc(Saw, 0, 0, 0.0, 0.7), osc(Saw, 0, 0, 12.0, 0.7)],
                 filter: filter(Lp12, 1200.0, 0.15, 0.2, 0.3),
@@ -100,7 +100,7 @@ pub fn factory() -> Vec<(&'static str, Patch)> {
             },
         ),
         (
-            "Pirinç",
+            "Brass",
             Patch {
                 osc: [osc(Saw, 0, 0, 0.0, 0.8), osc(Saw, 0, 0, -8.0, 0.7)],
                 filter: filter(Lp24, 500.0, 0.1, 0.55, 0.5),
@@ -124,7 +124,7 @@ pub fn factory() -> Vec<(&'static str, Patch)> {
             },
         ),
         (
-            "Vibrato lead",
+            "Vibrato Lead",
             Patch {
                 osc: [osc(Saw, 0, 0, 0.0, 0.8), osc(Square, 0, 7, 0.0, 0.4)],
                 filter: filter(Lp24, 1500.0, 0.3, 0.3, 0.5),
@@ -137,7 +137,7 @@ pub fn factory() -> Vec<(&'static str, Patch)> {
             },
         ),
         (
-            "Tremolo org",
+            "Tremolo Organ",
             Patch {
                 osc: [osc(Sine, 0, 0, 0.0, 0.8), osc(Sine, 1, 0, 0.0, 0.5)],
                 filter: filter(Lp12, 8000.0, 0.0, 0.0, 0.0),
@@ -149,7 +149,7 @@ pub fn factory() -> Vec<(&'static str, Patch)> {
             },
         ),
         (
-            "S&H bloop",
+            "S&H Bloop",
             Patch {
                 osc: [osc(Square, 0, 0, 0.0, 0.9), OFF],
                 filter: filter(Lp24, 600.0, 0.75, 0.2, 0.5),
@@ -161,7 +161,7 @@ pub fn factory() -> Vec<(&'static str, Patch)> {
             },
         ),
         (
-            "Uzak çan",
+            "Distant Bell",
             Patch {
                 osc: [osc(Sine, 0, 0, 0.0, 0.8), osc(Triangle, 2, 0, 0.0, 0.4)],
                 filter: filter(Lp12, 6000.0, 0.0, 0.0, 0.3),
@@ -172,7 +172,7 @@ pub fn factory() -> Vec<(&'static str, Patch)> {
             },
         ),
         (
-            "Saf sinüs",
+            "Pure Sine",
             Patch {
                 osc: [osc(Sine, 0, 0, 0.0, 1.0), OFF],
                 filter: filter(Lp12, 20_000.0, 0.0, 0.0, 0.0),

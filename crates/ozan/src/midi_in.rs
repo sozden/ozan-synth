@@ -6,11 +6,12 @@
 use std::sync::Arc;
 
 use midir::{Ignore, MidiInput, MidiInputConnection};
-use synth_core::Event;
+use ozan_core::Event;
 
+use crate::i18n::{fill, s};
 use crate::shared::{Events, Status};
 
-const CLIENT: &str = "Synth";
+const CLIENT: &str = "Ozan";
 
 /// Names of the MIDI inputs present now.
 pub fn ports() -> Vec<String> {
@@ -31,14 +32,14 @@ pub fn connect(name: &str, events: Events, status: Arc<Status>) -> Result<MidiCo
     let port = ports
         .iter()
         .find(|p| input.port_name(p).ok().as_deref() == Some(name))
-        .ok_or_else(|| format!("“{name}” artık bağlı değil"))?;
+        .ok_or_else(|| fill(s().midi_gone, &[&name]))?;
     let connection = input
         .connect(
             port,
-            "synth-in",
+            "ozan-in",
             move |_time, message, _| {
                 status.midi_received();
-                match synth_core::midi::parse(message) {
+                match ozan_core::midi::parse(message) {
                     // Choosing a preset is the interface's job.
                     Some(Event::ProgramChange(p)) => status.request_program(p),
                     Some(event) => {
@@ -54,6 +55,6 @@ pub fn connect(name: &str, events: Events, status: Arc<Status>) -> Result<MidiCo
             },
             (),
         )
-        .map_err(|e| format!("“{name}” açılamadı ({e}); başka bir program kullanıyor olabilir"))?;
+        .map_err(|e| fill(s().midi_busy, &[&name, &e]))?;
     Ok(MidiConnection { _connection: connection, name: name.to_string() })
 }

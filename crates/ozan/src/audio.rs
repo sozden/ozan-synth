@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, SampleFormat, SizedSample};
-use synth_core::{Engine, Event};
+use ozan_core::{Engine, Event};
 
 use crate::shared::Status;
 
@@ -18,7 +18,7 @@ pub struct AudioOutput {
 
 pub fn open(events: rtrb::Consumer<Event>, status: Arc<Status>) -> Result<AudioOutput, String> {
     let host = cpal::default_host();
-    let device = host.default_output_device().ok_or("ses çıkış aygıtı bulunamadı")?;
+    let device = host.default_output_device().ok_or(crate::i18n::s().no_audio_device)?;
     let name = device.description().map(|d| d.name().to_string()).unwrap_or_else(|_| device.to_string());
     let supported = device.default_output_config().map_err(|e| e.to_string())?;
     let config = supported.config();
@@ -27,7 +27,7 @@ pub fn open(events: rtrb::Consumer<Event>, status: Arc<Status>) -> Result<AudioO
         SampleFormat::I16 => build::<i16>(&device, config, events, status),
         SampleFormat::U16 => build::<u16>(&device, config, events, status),
         SampleFormat::I32 => build::<i32>(&device, config, events, status),
-        other => return Err(format!("desteklenmeyen örnek biçimi {other:?}")),
+        other => return Err(crate::i18n::fill(crate::i18n::s().sample_format, &[&format!("{other:?}")])),
     }?;
     stream.play().map_err(|e| e.to_string())?;
     Ok(AudioOutput { _stream: stream, sample_rate: config.sample_rate, name })
@@ -75,7 +75,7 @@ fn build<T: SizedSample + FromSample<f32>>(
                 }
                 status.report_audio(engine.active_voices(), peak, engine.held_notes(), engine.lfo_value());
             },
-            |e| eprintln!("ses: {e}"),
+            |e| eprintln!("audio: {e}"),
             None,
         )
         .map_err(|e| e.to_string())

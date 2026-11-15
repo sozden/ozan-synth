@@ -84,7 +84,7 @@ pub fn dropouts(env_db: &[f32]) -> Vec<usize> {
 pub fn read_wav(path: &Path) -> std::io::Result<(Vec<f32>, u32)> {
     let d = std::fs::read(path)?;
     if d.len() < 44 || &d[0..4] != b"RIFF" || u16::from_le_bytes([d[20], d[21]]) != 3 {
-        return Err(std::io::Error::other("32-bit float WAV bekleniyor"));
+        return Err(std::io::Error::other("expected a 32-bit float WAV"));
     }
     let channels = u16::from_le_bytes([d[22], d[23]]).max(1) as usize;
     let rate = u32::from_le_bytes([d[24], d[25], d[26], d[27]]);

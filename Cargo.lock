@@ -2547,6 +2547,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "ozan"
+version = "0.4.0"
+dependencies = [
+ "cpal",
+ "eframe",
+ "midir",
+ "ozan-core",
+ "rtrb",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "ozan-core"
+version = "0.4.0"
+dependencies = [
+ "serde",
+]
+
+[[package]]
+name = "ozan-lab"
+version = "0.4.0"
+dependencies = [
+ "cpal",
+ "ozan-core",
+ "png",
+ "rustfft",
+]
+
+[[package]]
 name = "parking"
 version = "2.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3304,36 +3334,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 3.0.10",
-]
-
-[[package]]
-name = "synth-app"
-version = "0.4.0"
-dependencies = [
- "cpal",
- "eframe",
- "midir",
- "rtrb",
- "serde",
- "serde_json",
- "synth-core",
-]
-
-[[package]]
-name = "synth-core"
-version = "0.4.0"
-dependencies = [
- "serde",
-]
-
-[[package]]
-name = "synth-lab"
-version = "0.4.0"
-dependencies = [
- "cpal",
- "png",
- "rustfft",
- "synth-core",
 ]
 
 [[package]]

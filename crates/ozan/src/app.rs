@@ -5,9 +5,10 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use eframe::egui::{self, Key, RichText, Vec2};
-use synth_core::{AdsrParams, Event, OscParams, Patch};
+use ozan_core::{AdsrParams, Event, OscParams, Patch};
 
 use crate::audio::{self, AudioOutput};
+use crate::i18n::{self, fill, s, Lang};
 use crate::knob::{self, Knob};
 use crate::midi_in::{self, MidiConnection};
 use crate::presets::{self, Preset};
@@ -29,7 +30,7 @@ const PC_KEYS: [(Key, u8); 15] = [
 /// How often MIDI inputs are looked for while none is connected.
 const RESCAN: Duration = Duration::from_secs(2);
 
-pub struct SynthApp {
+pub struct OzanApp {
     events: Events,
     status: Arc<Status>,
     audio: Result<AudioOutput, String>,
@@ -62,9 +63,10 @@ pub struct SynthApp {
     settings: Settings,
 }
 
-impl SynthApp {
+impl OzanApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         let settings = Settings::load();
+        i18n::select(settings.get("lang").and_then(Lang::from_code).unwrap_or(Lang::En));
         let theme = settings.get("theme").and_then(theme::index_of).unwrap_or(0);
         theme::select(&cc.egui_ctx, theme);
         let status = Arc::new(Status::default());
@@ -182,7 +184,7 @@ impl SynthApp {
     fn reload_presets(&mut self, select: Option<&str>) {
         let (list, problems) = presets::load_all();
         self.presets = list;
-        self.preset_note = problems.first().map(|p| format!("Okunamayan preset: {p}"));
+        self.preset_note = problems.first().map(|p| fill(s().unreadable_preset, &[p]));
         self.current = select.and_then(|name| self.presets.iter().position(|p| p.name == name));
     }
 
@@ -210,12 +212,12 @@ impl SynthApp {
 
     fn preset_bar(&mut self, ui: &mut egui::Ui) {
         let th = theme::t();
-        if ui.button("◀").on_hover_text("Önceki preset").clicked() {
+        if ui.button("◀").on_hover_text(s().prev_preset).clicked() {
             self.step_preset(-1);
         }
         let shown = match self.current {
             Some(i) => format!("{:02}  {}{}", i + 1, self.presets[i].name, if self.modified() { " *" } else { "" }),
-            None => "—  kaydedilmemiş ses".to_string(),
+            None => s().unsaved.to_string(),
         };
         let mut chosen = None;
         egui::ComboBox::from_id_salt("preset")
@@ -227,7 +229,7 @@ impl SynthApp {
                 for (i, preset) in self.presets.iter().enumerate() {
                     if i == factory {
                         ui.separator();
-                        ui.label(RichText::new("Senin preset'lerin").size(11.0).color(th.muted));
+                        ui.label(RichText::new(s().your_presets).size(11.0).color(th.muted));
                     }
                     if ui.selectable_label(self.current == Some(i), format!("{:02}  {}", i + 1, preset.name)).clicked() {
                         chosen = Some(i);
@@ -237,15 +239,15 @@ impl SynthApp {
         if let Some(i) = chosen {
             self.select_preset(i);
         }
-        if ui.button("▶").on_hover_text("Sonraki preset").clicked() {
+        if ui.button("▶").on_hover_text(s().next_preset).clicked() {
             self.step_preset(1);
         }
-        if ui.button("Kaydet").on_hover_text("Şu anki sesi preset olarak kaydeder").clicked() {
+        if ui.button(s().save).on_hover_text(s().save_hint).clicked() {
             let name = self.current.map(|i| self.presets[i].name.clone()).filter(|_| self.current.is_some_and(|i| self.presets[i].file.is_some()));
             self.save_name = Some(name.unwrap_or_default());
         }
         let deletable = self.current.is_some_and(|i| self.presets[i].file.is_some());
-        if ui.add_enabled(deletable, egui::Button::new("Sil")).on_disabled_hover_text("Fabrika preset'leri silinemez").clicked() {
+        if ui.add_enabled(deletable, egui::Button::new(s().delete)).on_disabled_hover_text(s().factory_locked).clicked() {
             self.confirm_delete = true;
         }
         if let Some(note) = &self.preset_note {
@@ -260,21 +262,21 @@ impl SynthApp {
             let mut save = false;
             let modal = egui::Modal::new(egui::Id::new("save_preset")).show(ctx, |ui| {
                 ui.set_width(320.0);
-                ui.heading("Preset kaydet");
+                ui.heading(s().save_title);
                 ui.add_space(6.0);
-                let field = ui.add(egui::TextEdit::singleline(&mut name).hint_text("Preset adı").desired_width(f32::INFINITY));
+                let field = ui.add(egui::TextEdit::singleline(&mut name).hint_text(s().preset_name).desired_width(f32::INFINITY));
                 field.request_focus();
                 let trimmed = name.trim();
                 if presets::path_for(trimmed).is_some_and(|p| p.exists()) && !trimmed.is_empty() {
-                    ui.label(RichText::new("Bu adda bir preset var; üzerine yazılacak.").size(11.0).color(theme::t().warm));
+                    ui.label(RichText::new(s().will_overwrite).size(11.0).color(theme::t().warm));
                 }
                 ui.add_space(6.0);
                 ui.horizontal(|ui| {
                     let ok = !trimmed.is_empty();
-                    if ui.add_enabled(ok, egui::Button::new("Kaydet")).clicked() || (ok && ui.input(|i| i.key_pressed(Key::Enter))) {
+                    if ui.add_enabled(ok, egui::Button::new(s().save)).clicked() || (ok && ui.input(|i| i.key_pressed(Key::Enter))) {
                         save = true;
                     }
-                    if ui.button("Vazgeç").clicked() {
+                    if ui.button(s().cancel).clicked() {
                         close = true;
                     }
                 });
@@ -286,7 +288,7 @@ impl SynthApp {
                         self.reload_presets(Some(&name));
                         self.settings.set("preset", &name);
                     }
-                    Err(e) => self.preset_note = Some(format!("Kaydedilemedi: {e}")),
+                    Err(e) => self.preset_note = Some(fill(s().save_failed, &[&e])),
                 }
             } else if !close && !modal.should_close() {
                 self.save_name = Some(name);
@@ -301,15 +303,15 @@ impl SynthApp {
             let mut answer = None;
             let modal = egui::Modal::new(egui::Id::new("delete_preset")).show(ctx, |ui| {
                 ui.set_width(320.0);
-                ui.heading("Preset silinsin mi?");
+                ui.heading(s().delete_title);
                 ui.add_space(6.0);
-                ui.label(format!("“{name}” dosyası kalıcı olarak silinir; geri alınamaz."));
+                ui.label(fill(s().delete_body, &[&name]));
                 ui.add_space(6.0);
                 ui.horizontal(|ui| {
-                    if ui.button("Sil").clicked() {
+                    if ui.button(s().delete).clicked() {
                         answer = Some(true);
                     }
-                    if ui.button("Vazgeç").clicked() {
+                    if ui.button(s().cancel).clicked() {
                         answer = Some(false);
                     }
                 });
@@ -321,7 +323,7 @@ impl SynthApp {
                             // The sound stays as it is; it just has no preset now.
                             self.reload_presets(None);
                         }
-                        Err(e) => self.preset_note = Some(format!("Silinemedi: {e}")),
+                        Err(e) => self.preset_note = Some(fill(s().delete_failed, &[&e])),
                     }
                 }
             }
@@ -334,11 +336,7 @@ impl SynthApp {
     fn header(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             let th = theme::t();
-            if th.wood {
-                ui.label(RichText::new("Synth").size(26.0).italics().color(th.text));
-            } else {
-                ui.label(RichText::new("SYNTH").size(20.0).strong().color(th.accent));
-            }
+            crate::logo::wordmark(ui, 20.0, th.text, th.accent).on_hover_text("Ozan — open-source synthesizer");
             ui.label(RichText::new(format!("v{}", env!("CARGO_PKG_VERSION"))).color(th.muted));
             ui.add_space(16.0);
             self.preset_bar(ui);
@@ -348,18 +346,18 @@ impl SynthApp {
                     widgets::led(ui, theme::t().good);
                 }
                 Err(e) => {
-                    ui.label(RichText::new(format!("Ses çıkışı açılamadı: {e}")).color(theme::t().hot));
+                    ui.label(RichText::new(fill(s().audio_failed, &[e])).color(theme::t().hot));
                 }
             });
         });
         ui.add_space(4.0);
         ui.horizontal(|ui| {
-            ui.label("MIDI giriş");
+            ui.label(s().midi_input);
             let current = self.midi.as_ref().map(|m| m.name.clone());
-            let shown = current.clone().unwrap_or_else(|| if self.midi_ports.is_empty() { "aygıt yok".into() } else { "kapalı".into() });
+            let shown = current.clone().unwrap_or_else(|| if self.midi_ports.is_empty() { s().no_device.into() } else { s().off.into() });
             let mut choice: Option<Option<String>> = None;
             egui::ComboBox::from_id_salt("midi_port").selected_text(shown).width(260.0).show_ui(ui, |ui| {
-                if ui.selectable_label(current.is_none(), "kapalı").clicked() {
+                if ui.selectable_label(current.is_none(), s().off).clicked() {
                     choice = Some(None);
                 }
                 for p in &self.midi_ports {
@@ -376,16 +374,16 @@ impl SynthApp {
                 }
                 None => {}
             }
-            if ui.button("⟳").on_hover_text("MIDI aygıtlarını yeniden ara").clicked() {
+            if ui.button("⟳").on_hover_text(s().rescan).clicked() {
                 self.scan_midi(false);
             }
             let glow = theme::t().good.gamma_multiply(0.25 + 0.75 * self.midi_glow);
-            widgets::led(ui, if self.midi.is_some() { glow } else { theme::t().track }).on_hover_text("MIDI mesajı geldikçe yanar");
+            widgets::led(ui, if self.midi.is_some() { glow } else { theme::t().track }).on_hover_text(s().midi_led);
             if let Some(e) = &self.midi_error {
                 ui.label(RichText::new(e).color(theme::t().warm));
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.button("Tüm notaları sustur").on_hover_text("Çalan notaları, yankı ve reverb kuyruklarını keser").clicked() {
+                if ui.button(s().panic).on_hover_text(s().panic_hint).clicked() {
                     self.release_pc_keys();
                     self.events.send(Event::AllNotesOff);
                     self.events.send(Event::ClearEffects);
@@ -393,12 +391,24 @@ impl SynthApp {
                 ui.add_space(12.0);
                 let th = theme::t();
                 let mut index = theme::current_index();
-                egui::ComboBox::from_id_salt("theme").selected_text(th.name).width(130.0).show_ui(ui, |ui| {
+                egui::ComboBox::from_id_salt("theme").selected_text(theme::display_name(th)).width(130.0).show_ui(ui, |ui| {
                     for (i, option) in theme::THEMES.iter().enumerate() {
-                        ui.selectable_value(&mut index, i, option.name);
+                        ui.selectable_value(&mut index, i, theme::display_name(option));
                     }
                 });
-                ui.label(RichText::new("Tema").color(th.muted));
+                ui.label(RichText::new(s().theme).color(th.muted));
+                ui.add_space(12.0);
+                let mut lang = i18n::current();
+                egui::ComboBox::from_id_salt("language").selected_text(lang.native_name()).width(90.0).show_ui(ui, |ui| {
+                    for option in Lang::ALL {
+                        ui.selectable_value(&mut lang, option, option.native_name());
+                    }
+                });
+                ui.label(RichText::new(s().language).color(th.muted));
+                if lang != i18n::current() {
+                    i18n::select(lang);
+                    self.settings.set("lang", lang.code());
+                }
                 if index != theme::current_index() {
                     theme::select(ui.ctx(), index);
                     self.settings.set("theme", theme::t().key);
@@ -415,33 +425,33 @@ impl SynthApp {
         ui.spacing_mut().item_spacing = Vec2::new(12.0, 12.0);
         ui.horizontal_top(|ui| {
             for (i, osc) in p.osc.iter_mut().enumerate() {
-                let title = if i == 0 { "OSİLATÖR 1" } else { "OSİLATÖR 2" };
+                let title = if i == 0 { s().osc1 } else { s().osc2 };
                 theme::section(ui, title, |ui| oscillator(ui, osc, i == 1));
             }
-            theme::section(ui, "FİLTRE", |ui| {
+            theme::section(ui, s().filter, |ui| {
                 knob::filter_mode_selector(ui, &mut p.filter.mode);
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = 2.0;
                     let f = &mut p.filter;
-                    Knob::new("Cutoff", &mut f.cutoff, 20.0, 20_000.0).log().default_value(800.0).format(hertz).show(ui);
-                    Knob::new("Rezonans", &mut f.resonance, 0.0, 1.0).default_value(0.3).format(percent).show(ui);
-                    Knob::new("Zarf", &mut f.env_amount, -1.0, 1.0).bipolar().default_value(0.4).format(signed_percent).show(ui);
-                    Knob::new("Nota izi", &mut f.key_track, 0.0, 1.0).default_value(0.5).format(percent).show(ui);
+                    Knob::new(s().cutoff, &mut f.cutoff, 20.0, 20_000.0).log().default_value(800.0).format(hertz).show(ui);
+                    Knob::new(s().resonance, &mut f.resonance, 0.0, 1.0).default_value(0.3).format(percent).show(ui);
+                    Knob::new(s().env_amount, &mut f.env_amount, -1.0, 1.0).bipolar().default_value(0.4).format(signed_percent).show(ui);
+                    Knob::new(s().key_track, &mut f.key_track, 0.0, 1.0).default_value(0.5).format(percent).show(ui);
                 });
             });
         });
         ui.horizontal_top(|ui| {
-            theme::section(ui, "FİLTRE ZARFI", |ui| envelope(ui, &mut p.filter_env));
-            theme::section(ui, "AMFİ ZARFI", |ui| envelope(ui, &mut p.amp_env));
-            theme::section(ui, "ÇIKIŞ", |ui| {
+            theme::section(ui, s().filter_env, |ui| envelope(ui, &mut p.filter_env));
+            theme::section(ui, s().amp_env, |ui| envelope(ui, &mut p.amp_env));
+            theme::section(ui, s().output, |ui| {
                 ui.horizontal(|ui| {
-                    Knob::new("Ses", &mut p.volume, 0.0, 1.0).default_value(0.7).format(percent).show(ui);
+                    Knob::new(s().volume, &mut p.volume, 0.0, 1.0).default_value(0.7).format(percent).show(ui);
                     widgets::vu_meter(ui, self.vu, self.meter, Vec2::new(136.0, 92.0));
                     ui.vertical(|ui| {
-                        ui.label(RichText::new("Ses sayısı").size(11.0).color(theme::t().muted));
-                        ui.label(RichText::new(format!("{} / {}", self.status.voices(), synth_core::MAX_VOICES)).monospace().size(16.0));
+                        ui.label(RichText::new(s().voices).size(11.0).color(theme::t().muted));
+                        ui.label(RichText::new(format!("{} / {}", self.status.voices(), ozan_core::MAX_VOICES)).monospace().size(16.0));
                         ui.add_space(8.0);
-                        if ui.button("Varsayılan").on_hover_text("Tüm ayarları başlangıç değerine döndürür").clicked() {
+                        if ui.button(s().init).on_hover_text(s().init_hint).clicked() {
                             *p = Patch::default();
                         }
                     });
@@ -449,73 +459,73 @@ impl SynthApp {
             });
         });
         ui.horizontal_top(|ui| {
-            theme::section(ui, "LFO", |ui| {
+            theme::section(ui, s().lfo, |ui| {
                 ui.horizontal(|ui| {
                     knob::lfo_wave_selector(ui, &mut p.lfo.wave);
                     ui.add_space(6.0);
                     let th = theme::t();
-                    widgets::led(ui, th.accent.gamma_multiply(0.12 + 0.88 * (0.5 + 0.5 * lfo_now))).on_hover_text("LFO'nun o anki değeri");
+                    widgets::led(ui, th.accent.gamma_multiply(0.12 + 0.88 * (0.5 + 0.5 * lfo_now))).on_hover_text(s().lfo_led);
                 });
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = 2.0;
                     let l = &mut p.lfo;
-                    Knob::new("Hız", &mut l.rate, 0.05, 20.0).log().default_value(5.0).format(rate).show(ui);
-                    Knob::new("Vibrato", &mut l.pitch, 0.0, 12.0).default_value(0.0).format(semitones).show(ui);
-                    Knob::new("Filtre", &mut l.cutoff, -1.0, 1.0).bipolar().default_value(0.0).format(signed_percent).show(ui);
-                    Knob::new("Tremolo", &mut l.amp, 0.0, 1.0).default_value(0.0).format(percent).show(ui);
+                    Knob::new(s().rate, &mut l.rate, 0.05, 20.0).log().default_value(5.0).format(rate).show(ui);
+                    Knob::new(s().vibrato, &mut l.pitch, 0.0, 12.0).default_value(0.0).format(semitones).show(ui);
+                    Knob::new(s().filter_knob, &mut l.cutoff, -1.0, 1.0).bipolar().default_value(0.0).format(signed_percent).show(ui);
+                    Knob::new(s().tremolo, &mut l.amp, 0.0, 1.0).default_value(0.0).format(percent).show(ui);
                 });
             });
-            theme::section(ui, "TEKERLEK · AFTERTOUCH · BEND", |ui| {
+            theme::section(ui, s().wheel_section, |ui| {
                 ui.horizontal(|ui| {
-                    widgets::mini_bar(ui, "Teker", wheel);
+                    widgets::mini_bar(ui, s().wheel, wheel);
                     ui.add_space(8.0);
-                    widgets::mini_bar(ui, "Aftertouch", aftertouch);
+                    widgets::mini_bar(ui, s().aftertouch, aftertouch);
                 });
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = 2.0;
-                    Knob::new("Vibrato", &mut p.wheel.vibrato, 0.0, 2.0).default_value(0.5).format(semitones).show(ui);
-                    Knob::new("Filtre", &mut p.wheel.cutoff, -1.0, 1.0).bipolar().default_value(0.0).format(signed_percent).show(ui);
-                    Knob::new("Bend", &mut p.bend_range, 0.0, 12.0).integer().default_value(2.0).format(bend).show(ui);
+                    Knob::new(s().vibrato, &mut p.wheel.vibrato, 0.0, 2.0).default_value(0.5).format(semitones).show(ui);
+                    Knob::new(s().filter_knob, &mut p.wheel.cutoff, -1.0, 1.0).bipolar().default_value(0.0).format(signed_percent).show(ui);
+                    Knob::new(s().bend, &mut p.bend_range, 0.0, 12.0).integer().default_value(2.0).format(bend).show(ui);
                 });
             });
         });
         ui.horizontal_top(|ui| {
             let fx = &mut p.fx;
-            theme::section(ui, "CHORUS", |ui| {
-                widgets::toggle(ui, &mut fx.chorus.on, "Açık");
+            theme::section(ui, s().chorus, |ui| {
+                widgets::toggle(ui, &mut fx.chorus.on, s().on);
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = 2.0;
                     let c = &mut fx.chorus;
-                    Knob::new("Hız", &mut c.rate, 0.1, 5.0).log().default_value(0.6).format(rate).show(ui);
-                    Knob::new("Derinlik", &mut c.depth, 0.0, 1.0).default_value(0.5).format(percent).show(ui);
-                    Knob::new("Karışım", &mut c.mix, 0.0, 1.0).default_value(0.7).format(percent).show(ui);
+                    Knob::new(s().rate, &mut c.rate, 0.1, 5.0).log().default_value(0.6).format(rate).show(ui);
+                    Knob::new(s().depth, &mut c.depth, 0.0, 1.0).default_value(0.5).format(percent).show(ui);
+                    Knob::new(s().mix, &mut c.mix, 0.0, 1.0).default_value(0.7).format(percent).show(ui);
                 });
             });
-            theme::section(ui, "DELAY", |ui| {
+            theme::section(ui, s().delay, |ui| {
                 ui.horizontal(|ui| {
-                    widgets::toggle(ui, &mut fx.delay.on, "Açık");
+                    widgets::toggle(ui, &mut fx.delay.on, s().on);
                     ui.add_space(12.0);
-                    widgets::toggle(ui, &mut fx.delay.ping_pong, "Ping-pong");
+                    widgets::toggle(ui, &mut fx.delay.ping_pong, s().ping_pong);
                 });
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = 2.0;
                     let d = &mut fx.delay;
-                    Knob::new("Süre", &mut d.time_ms, 20.0, 2000.0).log().default_value(375.0).format(millis).show(ui);
-                    Knob::new("Tekrar", &mut d.feedback, 0.0, 0.95).default_value(0.35).format(percent).show(ui);
-                    Knob::new("Ton", &mut d.tone, 500.0, 16_000.0).log().default_value(5000.0).format(hertz).show(ui);
-                    Knob::new("Karışım", &mut d.mix, 0.0, 1.0).default_value(0.3).format(percent).show(ui);
+                    Knob::new(s().time, &mut d.time_ms, 20.0, 2000.0).log().default_value(375.0).format(millis).show(ui);
+                    Knob::new(s().feedback, &mut d.feedback, 0.0, 0.95).default_value(0.35).format(percent).show(ui);
+                    Knob::new(s().tone, &mut d.tone, 500.0, 16_000.0).log().default_value(5000.0).format(hertz).show(ui);
+                    Knob::new(s().mix, &mut d.mix, 0.0, 1.0).default_value(0.3).format(percent).show(ui);
                 });
             });
-            theme::section(ui, "REVERB", |ui| {
-                widgets::toggle(ui, &mut fx.reverb.on, "Açık");
+            theme::section(ui, s().reverb, |ui| {
+                widgets::toggle(ui, &mut fx.reverb.on, s().on);
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = 2.0;
                     let r = &mut fx.reverb;
-                    Knob::new("Boyut", &mut r.size, 0.0, 1.0).default_value(0.5).format(percent).show(ui);
-                    Knob::new("Süre", &mut r.decay, 0.3, 10.0).log().default_value(1.8).format(seconds).show(ui);
-                    Knob::new("Sönüm", &mut r.damping, 0.0, 1.0).default_value(0.4).format(percent).show(ui);
-                    Knob::new("Gecikme", &mut r.predelay_ms, 0.0, 100.0).default_value(10.0).format(millis).show(ui);
-                    Knob::new("Karışım", &mut r.mix, 0.0, 1.0).default_value(0.3).format(percent).show(ui);
+                    Knob::new(s().size, &mut r.size, 0.0, 1.0).default_value(0.5).format(percent).show(ui);
+                    Knob::new(s().reverb_decay, &mut r.decay, 0.3, 10.0).log().default_value(1.8).format(seconds).show(ui);
+                    Knob::new(s().damping, &mut r.damping, 0.0, 1.0).default_value(0.4).format(percent).show(ui);
+                    Knob::new(s().predelay, &mut r.predelay_ms, 0.0, 100.0).default_value(10.0).format(millis).show(ui);
+                    Knob::new(s().mix, &mut r.mix, 0.0, 1.0).default_value(0.3).format(percent).show(ui);
                 });
             });
         });
@@ -526,9 +536,9 @@ impl SynthApp {
 
     fn keyboard(&mut self, ui: &mut egui::Ui) {
         let held = self.status.held_notes();
-        let names: Vec<String> = (0..128u8).filter(|n| held & (1u128 << n) != 0).map(synth_core::note_name).collect();
+        let names: Vec<String> = (0..128u8).filter(|n| held & (1u128 << n) != 0).map(ozan_core::note_name).collect();
         ui.horizontal(|ui| {
-            ui.label(RichText::new(format!("Bilgisayar klavyesi: A W S E D F T G Y H U J K · Z/X oktav (A = C{})", self.pc_octave)).size(12.0).color(theme::t().muted));
+            ui.label(RichText::new(fill(s().pc_keys, &[&self.pc_octave])).size(12.0).color(theme::t().muted));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.label(RichText::new(if names.is_empty() { "—".to_string() } else { names.join(" ") }).monospace().color(theme::t().accent));
             });
@@ -569,11 +579,11 @@ fn rate(v: f32) -> String {
 }
 
 fn semitones(v: f32) -> String {
-    format!("{v:.2} yt")
+    format!("{v:.2} {}", s().semitone_unit)
 }
 
 fn bend(v: f32) -> String {
-    format!("±{} yt", v as i32)
+    format!("±{} {}", v as i32, s().semitone_unit)
 }
 
 fn signed_int(v: f32) -> String {
@@ -591,17 +601,17 @@ fn oscillator(ui: &mut egui::Ui, osc: &mut OscParams, semitones: bool) {
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 2.0;
         let mut octave = osc.octave as f32;
-        if Knob::new("Oktav", &mut octave, -3.0, 3.0).integer().default_value(0.0).bipolar().format(signed_int).show(ui) {
+        if Knob::new(s().octave, &mut octave, -3.0, 3.0).integer().default_value(0.0).bipolar().format(signed_int).show(ui) {
             osc.octave = octave as i8;
         }
         if semitones {
             let mut semi = osc.semitones as f32;
-            if Knob::new("Yarım ton", &mut semi, -12.0, 12.0).integer().default_value(0.0).bipolar().format(signed_int).show(ui) {
+            if Knob::new(s().semitone, &mut semi, -12.0, 12.0).integer().default_value(0.0).bipolar().format(signed_int).show(ui) {
                 osc.semitones = semi as i8;
             }
         }
-        Knob::new("İnce", &mut osc.fine, -50.0, 50.0).default_value(0.0).bipolar().format(cents).show(ui);
-        Knob::new("Seviye", &mut osc.level, 0.0, 1.0).format(percent).show(ui);
+        Knob::new(s().fine, &mut osc.fine, -50.0, 50.0).default_value(0.0).bipolar().format(cents).show(ui);
+        Knob::new(s().level, &mut osc.level, 0.0, 1.0).format(percent).show(ui);
     });
 }
 
@@ -609,16 +619,16 @@ fn oscillator(ui: &mut egui::Ui, osc: &mut OscParams, semitones: bool) {
 fn envelope(ui: &mut egui::Ui, env: &mut AdsrParams) {
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 2.0;
-        Knob::new("Attack", &mut env.attack, 0.001, 5.0).log().format(seconds).show(ui);
-        Knob::new("Decay", &mut env.decay, 0.005, 5.0).log().format(seconds).show(ui);
-        Knob::new("Sustain", &mut env.sustain, 0.0, 1.0).format(percent).show(ui);
-        Knob::new("Release", &mut env.release, 0.005, 8.0).log().format(seconds).show(ui);
+        Knob::new(s().attack, &mut env.attack, 0.001, 5.0).log().format(seconds).show(ui);
+        Knob::new(s().decay, &mut env.decay, 0.005, 5.0).log().format(seconds).show(ui);
+        Knob::new(s().sustain, &mut env.sustain, 0.0, 1.0).format(percent).show(ui);
+        Knob::new(s().release, &mut env.release, 0.005, 8.0).log().format(seconds).show(ui);
         ui.add_space(8.0);
         widgets::envelope_graph(ui, env.attack, env.decay, env.sustain, env.release, Vec2::new(118.0, 92.0));
     });
 }
 
-impl eframe::App for SynthApp {
+impl eframe::App for OzanApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         self.computer_keyboard(&ctx);

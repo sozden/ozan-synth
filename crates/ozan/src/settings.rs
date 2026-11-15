@@ -1,15 +1,27 @@
 //! Small settings kept between runs, as `key=value` lines in
-//! `%APPDATA%\Synth\settings.txt` (`~/.config/Synth` elsewhere).
+//! `%APPDATA%\Ozan\settings.txt` (`~/.config/Ozan` elsewhere).
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
+fn base() -> Option<PathBuf> {
+    std::env::var_os("APPDATA").map(PathBuf::from).or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))
+}
+
 /// Folder of the program's own files.
 pub fn dir() -> Option<PathBuf> {
-    let base = std::env::var_os("APPDATA")
-        .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))?;
-    Some(base.join("Synth"))
+    Some(base()?.join("Ozan"))
+}
+
+/// Before it was named Ozan the program kept its files in a "Synth" folder; it is
+/// renamed once so settings and presets carry over.
+pub fn migrate_old_folder() {
+    let (Some(old), Some(new)) = (base().map(|b| b.join("Synth")), dir()) else { return };
+    if old.join("settings.txt").is_file() && !new.exists() {
+        if let Err(e) = std::fs::rename(&old, &new) {
+            eprintln!("could not move {} to {}: {e}", old.display(), new.display());
+        }
+    }
 }
 
 fn path() -> Option<PathBuf> {
@@ -46,7 +58,7 @@ impl Settings {
         }
         let text: String = self.0.iter().map(|(k, v)| format!("{k}={v}\n")).collect();
         if let Err(e) = std::fs::write(&path, text) {
-            eprintln!("ayarlar yazılamadı ({}): {e}", path.display());
+            eprintln!("settings not written ({}): {e}", path.display());
         }
     }
 }

@@ -3,7 +3,7 @@
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
-use synth_core::Event;
+use ozan_core::Event;
 
 /// Sends events to the audio thread. The queue itself is lock-free on the audio side;
 /// the mutex only orders the two senders (MIDI thread and interface).
