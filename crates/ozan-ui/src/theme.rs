@@ -163,6 +163,23 @@ pub fn index_of(key: &str) -> Option<usize> {
 
 /// A titled section of the panel.
 pub fn section<R>(ui: &mut egui::Ui, title: &str, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
+    section_sized(ui, title, None, add)
+}
+
+/// Room a section takes around its content (margins, border, title), per style.
+pub fn section_overhead() -> Vec2 {
+    match t().section_style {
+        SectionStyle::Card => Vec2::new(22.0, 43.0),
+        SectionStyle::Rule => Vec2::new(8.0, 26.0),
+    }
+}
+
+/// A section of exactly `size` (outer), so the sections of a row line up.
+pub fn section_box<R>(ui: &mut egui::Ui, key: &'static str, title: &str, size: Vec2, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
+    section_sized(ui, title, Some(size), |ui| crate::learn::in_section(key, || add(ui)))
+}
+
+fn section_sized<R>(ui: &mut egui::Ui, title: &str, size: Option<Vec2>, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
     let th = t();
     match th.section_style {
         SectionStyle::Card => {
@@ -170,8 +187,14 @@ pub fn section<R>(ui: &mut egui::Ui, title: &str, add: impl FnOnce(&mut egui::Ui
                 .fill(th.card)
                 .stroke(Stroke::new(1.0, th.border))
                 .corner_radius(8.0)
-                .inner_margin(egui::Margin::same(12))
+                .inner_margin(egui::Margin::same(if size.is_some() { 10 } else { 12 }))
                 .show(ui, |ui| {
+                    if let Some(size) = size {
+                        // Margins and the border take 22 points each way.
+                        let inner = size - Vec2::splat(22.0);
+                        ui.set_min_size(inner);
+                        ui.set_max_width(inner.x);
+                    }
                     ui.vertical(|ui| {
                         ui.spacing_mut().item_spacing.y = 6.0;
                         ui.label(egui::RichText::new(title).size(12.0).color(th.muted).strong());
@@ -189,6 +212,13 @@ pub fn section<R>(ui: &mut egui::Ui, title: &str, add: impl FnOnce(&mut egui::Ui
             egui::Frame::new()
                 .inner_margin(egui::Margin { left: 4, right: 4, top: 0, bottom: 4 })
                 .show(ui, |ui| {
+                    if let Some(size) = size {
+                        let inner = size - Vec2::new(8.0, 4.0);
+                        ui.set_min_size(inner);
+                        ui.set_max_width(inner.x);
+                    }
+                    // A sized section's rule runs to its edge, not just past its content.
+                    let edge = size.map(|_| ui.min_rect().right());
                     ui.vertical(|ui| {
                         ui.spacing_mut().item_spacing.y = 6.0;
                         let title = spaced(title);
@@ -197,7 +227,7 @@ pub fn section<R>(ui: &mut egui::Ui, title: &str, add: impl FnOnce(&mut egui::Ui
                         let text_pos = Pos2::new(rect.left(), rect.center().y - galley.size().y / 2.0);
                         let inner = add(ui);
                         // Rule across the whole section, broken where the title sits.
-                        let right = ui.min_rect().right();
+                        let right = edge.unwrap_or(ui.min_rect().right());
                         let y = rect.center().y;
                         let p = ui.painter();
                         p.galley(text_pos, galley, th.text);
