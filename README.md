@@ -1,11 +1,12 @@
-<p align="center"><img src="assets/logo.svg" alt="Ozan" width="520"></p>
+<p align="center"><img src="assets/logo.svg" alt="OZAN Synth" width="520"></p>
 
-# Ozan
+# OZAN Synth
 
 An open-source software synthesizer written in Rust, built up step by step.
 Play it with a USB MIDI keyboard, the computer keyboard or the mouse.
 
 *Ozan* (oh-ZAHN) is Turkish for a wandering poet-musician, the bard who travels with his instrument.
+The logo is drawn from geometry in `assets/make_logo.py`: the Z is a saw tooth, the A an envelope's attack.
 
 *Türkçe açıklama aşağıda.*
 
@@ -73,7 +74,7 @@ offset, the level after all notes end, and a click score at every note start/end
 
 ## Türkçe
 
-Ozan, Rust ile yazılmış, adım adım büyütülen açık kaynak bir yazılım synthesizer.
+OZAN Synth, Rust ile yazılmış, adım adım büyütülen açık kaynak bir yazılım synthesizer.
 Adı, sazıyla diyar diyar gezen halk şairinden geliyor.
 USB MIDI klavye, bilgisayar klavyesi ya da fareyle çalınır.
 

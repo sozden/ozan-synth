@@ -1,4 +1,4 @@
-//! Ozan - an open-source software synthesizer, built up step by step.
+//! OZAN Synth - an open-source software synthesizer, built up step by step.
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
@@ -19,7 +19,7 @@ use eframe::egui;
 fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_title("Ozan")
+            .with_title("OZAN Synth")
             .with_app_id("ozan")
             .with_icon(logo::icon())
             .with_inner_size([1180.0, 940.0])
@@ -27,5 +27,5 @@ fn main() -> eframe::Result {
         ..Default::default()
     };
     settings::migrate_old_folder();
-    eframe::run_native("Ozan", options, Box::new(|cc| Ok(Box::new(app::OzanApp::new(cc)))))
+    eframe::run_native("OZAN Synth", options, Box::new(|cc| Ok(Box::new(app::OzanApp::new(cc)))))
 }

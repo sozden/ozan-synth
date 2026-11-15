@@ -1,6 +1,6 @@
 [package]
 name = "ozan"
-description = "Ozan, standalone synthesizer: sound card output, USB MIDI input and the panel"
+description = "OZAN Synth, standalone synthesizer: sound card output, USB MIDI input and the panel"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

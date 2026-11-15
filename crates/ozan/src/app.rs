@@ -336,7 +336,7 @@ impl OzanApp {
     fn header(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             let th = theme::t();
-            crate::logo::wordmark(ui, 20.0, th.text, th.accent).on_hover_text("Ozan — open-source synthesizer");
+            crate::logo::lockup(ui, 22.0, th.text, th.accent, th.muted).on_hover_text("OZAN Synth — open-source synthesizer");
             ui.label(RichText::new(format!("v{}", env!("CARGO_PKG_VERSION"))).color(th.muted));
             ui.add_space(16.0);
             self.preset_bar(ui);

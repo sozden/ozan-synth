@@ -1,6 +1,6 @@
 [package]
 name = "ozan-core"
-description = "Sound engine of Ozan, the synthesizer: voices, oscillators, envelopes, MIDI parsing"
+description = "Sound engine of OZAN Synth: voices, oscillators, envelopes, MIDI parsing"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

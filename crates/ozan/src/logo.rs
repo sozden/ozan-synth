@@ -1,19 +1,19 @@
-//! The Ozan logo, drawn from geometry (no font): monoline lowercase "ozan" with the
-//! "z" as a sharp saw tooth in the accent colour. `assets/logo.svg` and the window
-//! icon use the same proportions.
-
-use std::f32::consts::PI;
+//! The OZAN Synth logo, drawn from geometry (no font for the letters): monoline
+//! capitals on a 100-unit cap height, O a circle, Z a saw tooth in the accent colour,
+//! A an open peak (Λ, an envelope's attack), N. `assets/make_logo.py` writes the SVG
+//! files from the same proportions.
 
 use eframe::egui::{self, Color32, Pos2, Sense, Shape, Stroke, Vec2};
 
-/// Proportions in units of the letter height.
-const STROKE: f32 = 0.17;
-const GAP: f32 = 0.28;
-const ROUND: f32 = 1.0; // width of o and a
-const NARROW: f32 = 0.8; // width of z and n
+const STROKE: f32 = 14.0;
+const GAP: f32 = 26.0;
+const O: f32 = 100.0;
+const Z: f32 = 76.0;
+const A: f32 = 84.0;
+const N: f32 = 76.0;
 
-/// Width of the word for letter height 1.
-pub const WIDTH: f32 = ROUND + GAP + NARROW + GAP + ROUND + GAP + NARROW;
+/// Width of the word in cap-height units (cap height = 100).
+const WORD: f32 = O + Z + A + N + 3.0 * GAP;
 
 /// Polyline with round ends and joins.
 fn round_line(painter: &egui::Painter, points: &[Pos2], width: f32, color: Color32) {
@@ -23,60 +23,49 @@ fn round_line(painter: &egui::Painter, points: &[Pos2], width: f32, color: Color
     }
 }
 
-/// Paints "ozan" with its top-left corner at `origin`, letters `h` high.
-pub fn paint_wordmark(painter: &egui::Painter, origin: Pos2, h: f32, text: Color32, accent: Color32) {
-    let w = STROKE * h;
+/// Paints "OZAN" with its top-left corner at `origin`, capitals `h` high.
+pub fn paint_word(painter: &egui::Painter, origin: Pos2, h: f32, text: Color32, accent: Color32) {
+    let k = h / 100.0;
+    let w = STROKE * k;
     let half = w / 2.0;
-    let r = h / 2.0 - half;
     let top = origin.y + half;
     let bottom = origin.y + h - half;
-    let mid = origin.y + h / 2.0;
     let mut x = origin.x;
 
-    // o
-    painter.circle_stroke(Pos2::new(x + h / 2.0, mid), r, Stroke::new(w, text));
-    x += ROUND * h + GAP * h;
+    painter.circle_stroke(Pos2::new(x + O * k / 2.0, origin.y + h / 2.0), O * k / 2.0 - half, Stroke::new(w, text));
+    x += (O + GAP) * k;
 
-    // z: a saw tooth
-    let zr = x + NARROW * h - half;
-    round_line(
-        painter,
-        &[Pos2::new(x + half, top), Pos2::new(zr, top), Pos2::new(x + half, bottom), Pos2::new(zr, bottom)],
-        w,
-        accent,
-    );
-    x += NARROW * h + GAP * h;
+    let (l, r) = (x + half, x + Z * k - half);
+    round_line(painter, &[Pos2::new(l, top), Pos2::new(r, top), Pos2::new(l, bottom), Pos2::new(r, bottom)], w, accent);
+    x += (Z + GAP) * k;
 
-    // a: bowl and stem
-    painter.circle_stroke(Pos2::new(x + h / 2.0, mid), r, Stroke::new(w, text));
-    let stem = x + ROUND * h - half;
-    round_line(painter, &[Pos2::new(stem, top + r * 0.2), Pos2::new(stem, bottom)], w, text);
-    x += ROUND * h + GAP * h;
+    let (l, r) = (x + half, x + A * k - half);
+    round_line(painter, &[Pos2::new(l, bottom), Pos2::new((l + r) / 2.0, top), Pos2::new(r, bottom)], w, text);
+    x += (A + GAP) * k;
 
-    // n: two stems and an arch
-    let left = x + half;
-    let right = x + NARROW * h - half;
-    let ar = (right - left) / 2.0;
-    let cy = top + ar;
-    let mut points = vec![Pos2::new(left, bottom), Pos2::new(left, cy)];
-    points.extend((1..24).map(|i| {
-        let a = PI + PI * i as f32 / 24.0;
-        Pos2::new(left + ar + ar * a.cos(), cy + ar * a.sin())
-    }));
-    points.push(Pos2::new(right, cy));
-    points.push(Pos2::new(right, bottom));
-    round_line(painter, &points, w, text);
+    let (l, r) = (x + half, x + N * k - half);
+    round_line(painter, &[Pos2::new(l, bottom), Pos2::new(l, top), Pos2::new(r, bottom), Pos2::new(r, top)], w, text);
 }
 
-/// The wordmark as a widget, letters `h` high.
-pub fn wordmark(ui: &mut egui::Ui, h: f32, text: Color32, accent: Color32) -> egui::Response {
-    let (rect, response) = ui.allocate_exact_size(Vec2::new(WIDTH * h + STROKE * h, h + STROKE * h), Sense::hover());
-    let origin = rect.min + Vec2::splat(STROKE * h / 2.0);
-    paint_wordmark(ui.painter(), origin, h, text, accent);
+/// The header lockup: OZAN in capitals `h` high, then SYNTH small and letter-spaced.
+pub fn lockup(ui: &mut egui::Ui, h: f32, text: Color32, accent: Color32, muted: Color32) -> egui::Response {
+    let k = h / 100.0;
+    let word = Vec2::new(WORD * k + STROKE * k, h + STROKE * k);
+    let label = ui.painter().layout_no_wrap(
+        "S Y N T H".to_string(),
+        egui::FontId::proportional((h * 0.42).max(9.0)),
+        muted,
+    );
+    let size = Vec2::new(word.x + h * 0.45 + label.size().x, word.y);
+    let (rect, response) = ui.allocate_exact_size(size, Sense::hover());
+    paint_word(ui.painter(), rect.min + Vec2::splat(STROKE * k / 2.0), h, text, accent);
+    // SYNTH sits on the baseline of the capitals.
+    let pos = Pos2::new(rect.min.x + word.x + h * 0.45, rect.min.y + STROKE * k / 2.0 + h - label.size().y * 0.85);
+    ui.painter().galley(pos, label, muted);
     response
 }
 
-/// Window and taskbar icon, made at start-up (`assets/icon.png`).
+/// Window and taskbar icon (`assets/icon.png`).
 pub fn icon() -> egui::IconData {
     eframe::icon_data::from_png_bytes(include_bytes!("../assets/icon.png")).unwrap_or_default()
 }

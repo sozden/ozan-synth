@@ -1,7 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 461.0 117.0" width="461" height="117">
-  <circle cx="58.5" cy="58.5" r="41.5" stroke="#e9dfc8" fill="none" stroke-width="17.0" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M145.0 17.0 H208.0 L145.0 100.0 H208.0" stroke="#e8742a" fill="none" stroke-width="17.0" stroke-linecap="round" stroke-linejoin="round"/>
-  <circle cx="294.5" cy="58.5" r="41.5" stroke="#e9dfc8" fill="none" stroke-width="17.0" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M336.0 25.3 V100.0" stroke="#e9dfc8" fill="none" stroke-width="17.0" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M381.0 100.0 V48.5 A31.5 31.5 0 0 1 444.0 48.5 V100.0" stroke="#e9dfc8" fill="none" stroke-width="17.0" stroke-linecap="round" stroke-linejoin="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 428 170" width="428" height="170">
+  <circle cx="57" cy="57" r="43" stroke="#e9dfc8" fill="none" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M140 14 H202 L140 100 H202" stroke="#e8742a" fill="none" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M242 100 L277 14 L312 100" stroke="#e9dfc8" fill="none" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M352 100 V14 L414 100 V14" stroke="#e9dfc8" fill="none" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="216" y="160" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="30" font-weight="600" letter-spacing="18" fill="#a39985">SYNTH</text>
 </svg>

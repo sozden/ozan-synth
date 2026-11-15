@@ -11,7 +11,7 @@ use ozan_core::Event;
 use crate::i18n::{fill, s};
 use crate::shared::{Events, Status};
 
-const CLIENT: &str = "Ozan";
+const CLIENT: &str = "OZAN Synth";
 
 /// Names of the MIDI inputs present now.
 pub fn ports() -> Vec<String> {
