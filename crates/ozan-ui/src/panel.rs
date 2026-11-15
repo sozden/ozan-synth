@@ -47,6 +47,7 @@ pub fn panel(ui: &mut egui::Ui, p: &mut Patch, bank: &WavetableBank, m: &Meters)
                 Knob::new(s().resonance, &mut f.resonance, 0.0, 1.0).default_value(0.3).format(percent).show(ui);
                 Knob::new(s().env_amount, &mut f.env_amount, -1.0, 1.0).bipolar().default_value(0.4).format(signed_percent).show(ui);
                 Knob::new(s().key_track, &mut f.key_track, 0.0, 1.0).default_value(0.5).format(percent).show(ui);
+            Knob::new(s().drive, &mut f.drive, 0.0, 1.0).default_value(0.0).format(percent).show(ui);
             });
         });
         theme::section(ui, s().unison, |ui| {

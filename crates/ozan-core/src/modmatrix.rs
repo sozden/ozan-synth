@@ -71,10 +71,12 @@ pub enum ModDest {
     Pan,
     /// ±50 cents of unison detune.
     UnisonDetune,
+    /// ±1 added to the filter drive.
+    Drive,
 }
 
 impl ModDest {
-    pub const ALL: [ModDest; 12] = [
+    pub const ALL: [ModDest; 13] = [
         ModDest::Cutoff,
         ModDest::Resonance,
         ModDest::Pitch,
@@ -87,6 +89,7 @@ impl ModDest {
         ModDest::Volume,
         ModDest::Pan,
         ModDest::UnisonDetune,
+        ModDest::Drive,
     ];
     pub const COUNT: usize = Self::ALL.len();
 

@@ -246,13 +246,14 @@ pub fn filter_mode_selector(ui: &mut egui::Ui, mode: &mut FilterMode) -> bool {
             FilterMode::Lp24 => "LP24",
             FilterMode::BandPass => "BP",
             FilterMode::HighPass => "HP",
+            FilterMode::Notch => "N",
         }
     }
     choice_row(
         ui,
         mode,
         &FilterMode::ALL,
-        Vec2::new(46.0, 26.0),
+        Vec2::new(40.0, 26.0),
         |p, r, m, c| {
             p.text(r.center(), egui::Align2::CENTER_CENTER, short(m), egui::FontId::proportional(12.0), c);
         },
@@ -261,6 +262,7 @@ pub fn filter_mode_selector(ui: &mut egui::Ui, mode: &mut FilterMode) -> bool {
             FilterMode::Lp24 => s().lp24,
             FilterMode::BandPass => s().band_pass,
             FilterMode::HighPass => s().high_pass,
+            FilterMode::Notch => s().notch,
         },
     )
 }

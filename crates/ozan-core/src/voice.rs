@@ -4,7 +4,7 @@
 use std::f32::consts::{FRAC_PI_4, SQRT_2};
 
 use crate::envelope::Adsr;
-use crate::filter::Filter;
+use crate::filter::{DcBlock, Filter};
 use crate::modmatrix::{ModDest, ModSource};
 use crate::oscillator::{Oscillator, Waveform};
 use crate::patch::{Patch, ENV_OCTAVES};
@@ -57,6 +57,8 @@ pub struct Voice {
     osc: [[Oscillator; MAX_UNISON]; 2],
     /// Left and right; the right one runs only when the voice is not mono.
     filter: [Filter; 2],
+    /// After the drive, left and right.
+    dc: [DcBlock; 2],
     filter_env: Adsr,
     amp_env: Adsr,
     mod_env: Adsr,
@@ -122,6 +124,7 @@ impl Voice {
             for f in &mut self.filter {
                 f.reset();
             }
+            self.dc = Default::default();
             // Copies start at different points of the cycle, so they do not begin in
             // phase (louder, then a slow sweep). Copy 0 keeps the classic phases.
             for (k, row) in self.osc.iter_mut().enumerate() {
@@ -248,6 +251,7 @@ impl Voice {
 
         let f = &patch.filter;
         let resonance = (f.resonance + at(ModDest::Resonance)).clamp(0.0, 1.0);
+        let drive = (f.drive + at(ModDest::Drive)).clamp(0.0, 1.0);
         let tracked = cutoff * (f.key_track * (self.note as f32 - 60.0) / 12.0 + m.cutoff_octaves + at(ModDest::Cutoff) * MATRIX_OCTAVES).exp2();
         let amount = f.env_amount * ENV_OCTAVES;
         let sens = patch.play.velocity.clamp(0.0, 1.0);
@@ -297,6 +301,10 @@ impl Voice {
             } else {
                 l *= norm;
                 r *= norm;
+            }
+            if drive > 0.0 {
+                l = self.dc[0].process(crate::filter::drive(l, drive), sample_rate);
+                r = if stereo { self.dc[1].process(crate::filter::drive(r, drive), sample_rate) } else { l };
             }
             let yl = self.filter[0].process_with(l, f.mode, g, k);
             let yr = if stereo { self.filter[1].process_with(r, f.mode, g, k) } else { yl };

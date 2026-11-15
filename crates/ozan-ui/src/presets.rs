@@ -104,6 +104,7 @@ mod tests {
         // Stage 4 had no unison, matrix or wavetable fields either.
         patch.remove("unison");
         patch.remove("mods");
+        patch["filter"].as_object_mut().unwrap().remove("drive");
         for osc in patch["osc"].as_array_mut().unwrap() {
             let osc = osc.as_object_mut().unwrap();
             osc.remove("table");

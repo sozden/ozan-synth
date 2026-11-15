@@ -100,6 +100,7 @@ pub fn dest_name(dest: ozan_core::ModDest) -> &'static str {
         Volume => t.dst_volume,
         Pan => t.dst_pan,
         UnisonDetune => t.dst_detune,
+        Drive => t.dst_drive,
     }
 }
 
@@ -289,6 +290,10 @@ pub struct Strings {
     pub scope: &'static str,
     pub wave: &'static str,
     pub spectrum: &'static str,
+    // Drive, notch
+    pub drive: &'static str,
+    pub notch: &'static str,
+    pub dst_drive: &'static str,
     // Errors from devices and files
     pub no_audio_device: &'static str,
     pub sample_format: &'static str,
@@ -456,6 +461,9 @@ pub static EN: Strings = Strings {
     scope: "SCOPE",
     wave: "Wave",
     spectrum: "Spectrum",
+    drive: "Drive",
+    notch: "Notch: cuts around the cutoff",
+    dst_drive: "Drive",
     no_audio_device: "no sound output device",
     sample_format: "unsupported sample format {}",
     midi_gone: "“{}” is no longer connected",
@@ -621,6 +629,9 @@ pub static TR: Strings = Strings {
     scope: "OSİLOSKOP",
     wave: "Dalga",
     spectrum: "Spektrum",
+    drive: "Drive",
+    notch: "Çentik: cutoff çevresini oyar",
+    dst_drive: "Drive",
     no_audio_device: "ses çıkış aygıtı bulunamadı",
     sample_format: "desteklenmeyen örnek biçimi {}",
     midi_gone: "“{}” artık bağlı değil",

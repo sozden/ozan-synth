@@ -36,7 +36,7 @@ const OFF: OscParams = OscParams {
 };
 
 fn filter(mode: FilterMode, cutoff: f32, resonance: f32, env_amount: f32, key_track: f32) -> FilterParams {
-    FilterParams { mode, cutoff, resonance, env_amount, key_track }
+    FilterParams { mode, cutoff, resonance, env_amount, key_track, drive: 0.0 }
 }
 
 fn adsr(attack: f32, decay: f32, sustain: f32, release: f32) -> AdsrParams {
@@ -368,6 +368,32 @@ pub fn factory() -> Vec<(&'static str, Patch)> {
                     ModSlot::new(ModSource::Lfo2, ModDest::Osc2Position, 0.3),
                 ]),
                 fx: fx(chorus(0.3, 0.5, 0.5), None, reverb(0.85, 5.0, 0.45, 25.0, 0.45)),
+                volume: 0.94,
+                ..d
+            },
+        ),
+        (
+            "Gritty Bass",
+            Patch {
+                osc: [osc(Saw, -1, 0, 0.0, 0.8), osc(Square, -1, 0, -6.0, 0.6)],
+                filter: FilterParams { drive: 0.6, ..filter(Lp24, 400.0, 0.5, 0.45, 0.4) },
+                filter_env: adsr(0.002, 0.3, 0.2, 0.15),
+                amp_env: adsr(0.002, 0.2, 1.0, 0.12),
+                mods: mods(&[ModSlot::new(ModSource::Velocity, ModDest::Drive, 0.4)]),
+                volume: 0.38,
+                ..d
+            },
+        ),
+        (
+            "Notch Sweep",
+            Patch {
+                osc: [osc(Saw, 0, 0, 0.0, 0.7), osc(Saw, 0, 0, 9.0, 0.7)],
+                unison: unison(3, 14.0, 0.7),
+                filter: filter(Notch, 1200.0, 0.3, 0.0, 0.2),
+                amp_env: adsr(0.4, 1.0, 0.9, 1.8),
+                lfo2: lfo(LfoWave::Triangle, 0.25, 0.0, 0.0, 0.0),
+                mods: mods(&[ModSlot::new(ModSource::Lfo2, ModDest::Cutoff, 0.45)]),
+                fx: fx(chorus(0.4, 0.5, 0.5), None, reverb(0.7, 3.0, 0.4, 20.0, 0.35)),
                 volume: 0.94,
                 ..d
             },

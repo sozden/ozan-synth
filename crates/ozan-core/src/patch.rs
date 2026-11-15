@@ -55,6 +55,9 @@ pub struct FilterParams {
     pub env_amount: f32,
     /// How much the cutoff follows the note, 0..1 (1 = one octave per octave).
     pub key_track: f32,
+    /// Saturation before the filter, 0..1 (0 = clean). Missing in older presets.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub drive: f32,
 }
 
 /// Cutoff range of the filter envelope at full amount, in octaves.
@@ -256,7 +259,7 @@ impl Default for Patch {
                 OscParams { wave: Waveform::Saw, level: 0.8, ..OscParams::default() },
                 OscParams { wave: Waveform::Saw, fine: 7.0, level: 0.6, ..OscParams::default() },
             ],
-            filter: FilterParams { mode: FilterMode::Lp24, cutoff: 800.0, resonance: 0.3, env_amount: 0.4, key_track: 0.5 },
+            filter: FilterParams { mode: FilterMode::Lp24, cutoff: 800.0, resonance: 0.3, env_amount: 0.4, key_track: 0.5, drive: 0.0 },
             filter_env: AdsrParams { attack: 0.005, decay: 0.5, sustain: 0.3, release: 0.5 },
             amp_env: AdsrParams { attack: 0.005, decay: 0.3, sustain: 0.8, release: 0.4 },
             lfo: LfoParams::default(),

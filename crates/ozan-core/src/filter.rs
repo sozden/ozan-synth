@@ -14,10 +14,42 @@ pub enum FilterMode {
     Lp24,
     BandPass,
     HighPass,
+    /// Cuts a band around the cutoff, passes the rest (phaser-like when swept).
+    Notch,
 }
 
 impl FilterMode {
-    pub const ALL: [FilterMode; 4] = [FilterMode::Lp12, FilterMode::Lp24, FilterMode::BandPass, FilterMode::HighPass];
+    pub const ALL: [FilterMode; 5] = [FilterMode::Lp12, FilterMode::Lp24, FilterMode::BandPass, FilterMode::HighPass, FilterMode::Notch];
+}
+
+/// Soft saturation before the filter: `amount` 0 leaves the signal untouched, 1
+/// drives it about ten times into a tanh curve. Full scale stays full scale.
+#[inline]
+pub fn drive(x: f32, amount: f32) -> f32 {
+    if amount <= 0.0 {
+        return x;
+    }
+    let g = 1.0 + 9.0 * amount * amount;
+    (g * x).tanh() / g.tanh()
+}
+
+/// Removes the offset that saturating an uneven wave (saw, pulse) creates: a
+/// one-pole high-pass at 10 Hz.
+#[derive(Clone, Debug, Default)]
+pub struct DcBlock {
+    x1: f32,
+    y1: f32,
+}
+
+impl DcBlock {
+    #[inline]
+    pub fn process(&mut self, x: f32, sample_rate: f32) -> f32 {
+        let r = 1.0 - std::f32::consts::TAU * 10.0 / sample_rate;
+        let y = x - self.x1 + r * self.y1;
+        self.x1 = x;
+        self.y1 = y;
+        y
+    }
 }
 
 /// One 12 dB state-variable stage.
@@ -87,6 +119,10 @@ impl Filter {
             }
             FilterMode::BandPass => self.a.process(x, g, k).band,
             FilterMode::HighPass => self.a.process(x, g, k).high,
+            FilterMode::Notch => {
+                let o = self.a.process(x, g, k);
+                o.low + o.high
+            }
         }
     }
 }
@@ -128,6 +164,35 @@ mod tests {
         let centre = gain(FilterMode::BandPass, 1000.0, 0.5, 1000.0);
         assert!(centre > gain(FilterMode::BandPass, 1000.0, 0.5, 100.0) * 5.0);
         assert!(centre > gain(FilterMode::BandPass, 1000.0, 0.5, 10_000.0) * 5.0);
+    }
+
+    #[test]
+    fn notch_cuts_the_cutoff_and_passes_the_rest() {
+        assert!(gain(FilterMode::Notch, 1000.0, 0.0, 1000.0) < 0.05);
+        assert!((gain(FilterMode::Notch, 1000.0, 0.0, 100.0) - 1.0).abs() < 0.05);
+        assert!((gain(FilterMode::Notch, 1000.0, 0.0, 10_000.0) - 1.0).abs() < 0.05);
+    }
+
+    #[test]
+    fn drive_is_transparent_at_zero_and_adds_odd_harmonics() {
+        let n = 4800;
+        let sine: Vec<f32> = (0..n).map(|i| (std::f32::consts::TAU * 1000.0 * i as f32 / SR).sin() * 0.8).collect();
+        assert!(sine.iter().all(|&x| drive(x, 0.0) == x));
+        // Third harmonic (3 kHz) energy, by correlation over whole cycles.
+        let third = |y: &[f32]| {
+            let (mut re, mut im) = (0.0f32, 0.0f32);
+            for (i, v) in y.iter().enumerate() {
+                let a = std::f32::consts::TAU * 3000.0 * i as f32 / SR;
+                re += v * a.cos();
+                im += v * a.sin();
+            }
+            (re * re + im * im).sqrt() / y.len() as f32
+        };
+        let clean = third(&sine);
+        let driven: Vec<f32> = sine.iter().map(|&x| drive(x, 1.0)).collect();
+        assert!(third(&driven) > 100.0 * clean.max(1e-6), "{} vs {}", third(&driven), clean);
+        assert!(driven.iter().all(|v| v.abs() <= 1.0));
+        assert!((drive(1.0, 0.7) - 1.0).abs() < 1e-6);
     }
 
     #[test]
