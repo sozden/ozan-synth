@@ -42,6 +42,24 @@ cargo run --release -p ozan
 Needs Rust 1.85 or newer. On Windows, a MIDI input can be used by one program at a
 time — close your DAW (or let it release the keyboard) before connecting here.
 
+## Plugin (CLAP / VST3)
+
+```
+powershell -ExecutionPolicy Bypass -File scripts\bundle.ps1
+```
+
+builds `dist\OZAN Synth.clap` and `dist\OZAN Synth.vst3`, then loads the CLAP once in a
+small test host (`ozan-lab plugin`) to check that it plays. Copy the `.vst3` folder to
+`C:\Program Files\Common Files\VST3` (or point your DAW at `dist`), the `.clap` file to
+`C:\Program Files\Common Files\CLAP`.
+
+The host sees a **Preset** selector (all factory presets) and relative controls that
+leave the preset alone at their defaults: volume, cutoff, resonance, filter envelope
+amount, attack and release, LFO rate, wavetable position, unison detune, glide, and
+chorus/delay/reverb mix. The plugin has no editor window of its own yet; the host shows
+its generic sliders. Built with [nih-plug](https://github.com/robbert-vdh/nih-plug) (ISC),
+pinned to a reviewed commit.
+
 ## Layout
 
 | Crate | What it holds |
@@ -49,6 +67,7 @@ time — close your DAW (or let it release the keyboard) before connecting here.
 | `crates/ozan-core` | Sound engine: oscillators, filter, envelopes, LFO, voices, MIDI parsing, factory presets. No required dependencies (`serde` optional), no allocation while rendering — meant to run later inside a plugin too. |
 | `crates/ozan` | Standalone program: sound card (`cpal`), MIDI (`midir`), panel (`egui`). |
 
+| `crates/ozan-plugin` | CLAP and VST3 instrument through nih-plug: preset selector and relative macro parameters. |
 | `crates/ozan-lab` | Listening lab (not shipped): renders every preset to WAV with spectrograms and measurements, records the real output via WASAPI loopback. |
 
 Events from MIDI and the panel reach the audio thread through a lock-free queue (`rtrb`).
@@ -72,7 +91,7 @@ offset, the level after all notes end, and a click score at every note start/end
 3. ~~Modulation: LFO, mod wheel, presets (save/load)~~ → done, with aftertouch and program change
 4. ~~Effects: chorus, delay, reverb~~ → done
 5. ~~Wavetable oscillator, unison, modulation matrix~~ → done
-6. VST3/CLAP plugin with `nih-plug`
+6. ~~VST3/CLAP plugin with `nih-plug`~~ → first version done (generic host sliders); own editor window next
 
 ---
 
@@ -89,6 +108,7 @@ delay (ping-pong) ve reverb efektleri. Wavetable osilatör (5 tablo), 7 kopyaya 
 ve 6 slotlu mod matrisi. Poly/mono/legato, glide, velocity hassasiyeti ve gürültü. 20 fabrika
 preset'i; kendi preset'lerini kaydedip silebilir, MIDI program change ile seçebilirsin.
 USB MIDI otomatik bağlanır; Stüdyo (70'ler) ve Gece temaları arasında seçim yapılır.
+Ayrıca CLAP/VST3 eklentisi olarak DAW içinde çalışır (`scripts\bundle.ps1`).
 
 **Çalıştırma:** `cargo run --release -p ozan`. Arayüz varsayılan olarak İngilizce;
 başlıktaki **Language** menüsünden Türkçe seçilebilir.

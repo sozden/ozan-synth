@@ -1,0 +1,16 @@
+[package]
+name = "ozan-plugin"
+description = "OZAN Synth as a CLAP and VST3 instrument"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+ozan-core = { path = "../ozan-core" }
+# Not on crates.io; pinned to a reviewed commit (user approved, 2026-11-15).
+nih_plug = { git = "https://github.com/robbert-vdh/nih-plug.git", rev = "de421011f41a6d10fc8c7a6084e4f4dee0143683" }

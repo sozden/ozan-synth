@@ -12,3 +12,6 @@ ozan-core = { path = "../ozan-core" }
 cpal = "0.18.2"
 png = "0.18.1"
 rustfft = "6"
+libloading = "0.9"
+# Same pinned commit nih-plug uses (see crates/ozan-plugin).
+clap-sys = { git = "https://github.com/micahrj/clap-sys.git", rev = "25d7f53fdb6363ad63fbd80049cb7a42a97ac156" }
