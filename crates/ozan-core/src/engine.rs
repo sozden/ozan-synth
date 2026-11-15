@@ -4,6 +4,9 @@ use crate::effects::Effects;
 use crate::lfo::Lfo;
 use crate::patch::{Patch, MOD_OCTAVES};
 use crate::voice::{Modulation, Voice};
+use crate::wavetable::WavetableBank;
+
+use std::sync::Arc;
 
 pub const MAX_VOICES: usize = 16;
 
@@ -18,7 +21,11 @@ const BLOCK: usize = 32;
 const LFO_SLEW: f32 = 0.004;
 
 /// Something that happens to the engine, from MIDI or from the user interface.
+///
+/// The patch travels inline although it makes every event larger: boxing it would
+/// mean freeing memory on the audio thread when the old patch is replaced.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[allow(clippy::large_enum_variant)]
 pub enum Event {
     NoteOn { note: u8, velocity: u8 },
     NoteOff { note: u8 },
@@ -55,10 +62,21 @@ pub struct Engine {
     lfo_value: f32,
     pedal: bool,
     counter: u64,
+    /// For the matrix's random source.
+    seed: u32,
+    /// Read-only tables shared by all voices (and by the interface for drawing).
+    bank: Arc<WavetableBank>,
 }
 
 impl Engine {
+    /// Builds the wavetables (a fraction of a second); call it outside the audio
+    /// callback.
     pub fn new(sample_rate: f32) -> Self {
+        Self::with_bank(sample_rate, Arc::new(WavetableBank::new()))
+    }
+
+    /// Shares already built wavetables (e.g. with the interface).
+    pub fn with_bank(sample_rate: f32, bank: Arc<WavetableBank>) -> Self {
         let patch = Patch::default();
         Self {
             sample_rate,
@@ -74,6 +92,8 @@ impl Engine {
             lfo_value: 0.0,
             pedal: false,
             counter: 0,
+            seed: 0x9E37_79B9,
+            bank,
         }
     }
 
@@ -125,7 +145,7 @@ impl Engine {
         self.counter += 1;
         // The same note again reuses its voice (no doubled, phasing notes).
         if let Some(v) = self.voices.iter_mut().find(|v| v.is_active() && v.note == note) {
-            v.start(note, velocity, self.counter, true);
+            v.start(note, velocity, self.counter, true, 0.0);
             return;
         }
         let index = self
@@ -134,7 +154,16 @@ impl Engine {
             .position(|v| !v.is_active())
             .or_else(|| self.steal())
             .unwrap_or(0);
-        self.voices[index].start(note, velocity, self.counter, false);
+        let random = self.random();
+        self.voices[index].start(note, velocity, self.counter, false, random);
+    }
+
+    /// -1..1 (xorshift).
+    fn random(&mut self) -> f32 {
+        self.seed ^= self.seed << 13;
+        self.seed ^= self.seed >> 17;
+        self.seed ^= self.seed << 5;
+        (self.seed >> 8) as f32 / (1u32 << 23) as f32 - 1.0
     }
 
     /// Voice to take over when all are busy: the quietest released voice, otherwise
@@ -182,6 +211,9 @@ impl Engine {
             cutoff_octaves: (lfo * p.lfo.cutoff + wheel * p.wheel.cutoff) * MOD_OCTAVES,
             // Tremolo dips the level from full down to (1 - depth).
             amp: 1.0 - p.lfo.amp * 0.5 * (1.0 - lfo),
+            lfo,
+            wheel: self.wheel,
+            aftertouch: self.aftertouch,
         }
     }
 
@@ -213,8 +245,9 @@ impl Engine {
     /// At most [`BLOCK`] samples.
     fn render_block(&mut self, left: &mut [f32], right: &mut [f32]) {
         let n = left.len();
-        let mut mono = [0.0f32; BLOCK];
-        let mono = &mut mono[..n];
+        let mut dry_l = [0.0f32; BLOCK];
+        let mut dry_r = [0.0f32; BLOCK];
+        let (dry_l, dry_r) = (&mut dry_l[..n], &mut dry_r[..n]);
         // About 10 ms smoothing.
         let k = 1.0 - (-(BLOCK as f32) / (0.01 * self.sample_rate)).exp();
         let target_cutoff = self.patch.filter.cutoff.max(1.0).log2();
@@ -223,11 +256,11 @@ impl Engine {
         let cutoff = self.log_cutoff.exp2();
         let modulation = self.modulation(n);
         for v in &mut self.voices {
-            v.render_add(mono, &self.patch, &modulation, cutoff, self.sample_rate);
+            v.render_add(dry_l, dry_r, &self.patch, &modulation, cutoff, self.sample_rate, &self.bank);
         }
         let gain = self.gain;
         for i in 0..n {
-            let (l, r) = self.effects.process(mono[i] * VOICE_GAIN, &self.patch.fx);
+            let (l, r) = self.effects.process(dry_l[i] * VOICE_GAIN, dry_r[i] * VOICE_GAIN, &self.patch.fx);
             // Gentle saturation instead of hard clipping on loud chords.
             left[i] = (l * gain).tanh();
             right[i] = (r * gain).tanh();
@@ -339,7 +372,7 @@ mod modulation_tests {
     /// A plain sine through an open filter.
     fn sine_patch() -> Patch {
         let mut p = Patch::default();
-        p.osc[0] = OscParams { wave: Waveform::Sine, octave: 0, semitones: 0, fine: 0.0, level: 1.0 };
+        p.osc[0] = OscParams { wave: Waveform::Sine, level: 1.0, ..OscParams::default() };
         p.osc[1].level = 0.0;
         p.filter.cutoff = 20_000.0;
         p.filter.env_amount = 0.0;
@@ -394,6 +427,89 @@ mod modulation_tests {
         // The full swing is 2 × 4 octaves; one 32-sample block may move only part of it.
         assert!(biggest_step < 0.2 * 2.0 * MOD_OCTAVES, "{biggest_step}");
         assert!(cut.iter().cloned().fold(f32::MIN, f32::max) > 0.99 * MOD_OCTAVES);
+    }
+
+    fn render_lr(e: &mut Engine, n: usize) -> (Vec<f32>, Vec<f32>) {
+        let mut l = vec![0.0; n];
+        let mut r = vec![0.0; n];
+        e.render_stereo(&mut l, &mut r);
+        (l, r)
+    }
+
+    fn rms(x: &[f32]) -> f32 {
+        (x.iter().map(|v| v * v).sum::<f32>() / x.len() as f32).sqrt()
+    }
+
+    #[test]
+    fn single_copy_stays_mono() {
+        let mut e = Engine::new(SR);
+        e.handle(Event::NoteOn { note: 60, velocity: 100 });
+        let (l, r) = render_lr(&mut e, 9600);
+        assert!(rms(&l) > 0.01);
+        assert_eq!(l, r);
+    }
+
+    #[test]
+    fn unison_widens_and_keeps_level() {
+        let level = |voices: u8| {
+            let mut e = Engine::new(SR);
+            let p = Patch { unison: crate::UnisonParams { voices, detune: 30.0, spread: 1.0 }, ..Patch::default() };
+            e.handle(Event::Patch(p));
+            e.handle(Event::NoteOn { note: 48, velocity: 100 });
+            render_lr(&mut e, 4800); // past the attack
+            let (l, r) = render_lr(&mut e, 48_000);
+            let corr = l.iter().zip(&r).map(|(a, b)| a * b).sum::<f32>()
+                / (l.iter().map(|a| a * a).sum::<f32>() * r.iter().map(|b| b * b).sum::<f32>()).sqrt();
+            (20.0 * (0.5 * (rms(&l) + rms(&r))).log10(), corr)
+        };
+        let (one, corr_one) = level(1);
+        let (seven, corr_seven) = level(7);
+        assert!((corr_one - 1.0).abs() < 1e-6);
+        assert!(corr_seven < 0.9, "not wide: {corr_seven}");
+        assert!((seven - one).abs() < 3.0, "{one:.1} dB vs {seven:.1} dB");
+    }
+
+    #[test]
+    fn matrix_slots_act_and_off_slots_do_nothing() {
+        use crate::{ModDest, ModSlot, ModSource};
+        let play = |slot: ModSlot, velocity: u8| {
+            let mut e = Engine::new(SR);
+            let mut p = Patch::default();
+            p.mods[0] = slot;
+            e.handle(Event::Patch(p));
+            e.handle(Event::NoteOn { note: 60, velocity });
+            render_lr(&mut e, 9600)
+        };
+        let plain = play(ModSlot::default(), 127);
+        // A slot whose source is off changes nothing, whatever its amount.
+        assert_eq!(play(ModSlot::new(ModSource::Off, ModDest::Volume, -1.0), 127), plain);
+        // Full velocity times -1 on volume: silence.
+        let (l, _) = play(ModSlot::new(ModSource::Velocity, ModDest::Volume, -1.0), 127);
+        assert!(rms(&l) < 1e-6);
+        // Velocity on volume: harder notes louder than without the slot.
+        let (soft, _) = play(ModSlot::new(ModSource::Velocity, ModDest::Volume, 1.0), 127);
+        assert!(rms(&soft) > 1.5 * rms(&plain.0));
+        // Random to pan: each note lands somewhere else.
+        let (l, r) = play(ModSlot::new(ModSource::Random, ModDest::Pan, 1.0), 100);
+        assert!((rms(&l) - rms(&r)).abs() > 0.001);
+    }
+
+    #[test]
+    fn matrix_lfo_moves_wavetable_position() {
+        use crate::{ModDest, ModSlot, ModSource, Waveform};
+        let mut e = Engine::new(SR);
+        let mut p = sine_patch();
+        p.osc[0].wave = Waveform::Wavetable; // basic table, position 0: a sine
+        p.lfo = LfoParams { wave: LfoWave::Square, rate: 1.0, pitch: 0.0, cutoff: 0.0, amp: 0.0 };
+        p.mods[0] = ModSlot::new(ModSource::Lfo, ModDest::Osc1Position, 1.0);
+        e.handle(Event::Patch(p));
+        e.handle(Event::NoteOn { note: 57, velocity: 100 });
+        let (l, _) = render_lr(&mut e, 48_000);
+        // First half: LFO +1 → position 1 (square, rich); second half: position 0 (sine).
+        let sharpness = |x: &[f32]| x.windows(2).map(|w| (w[1] - w[0]).abs()).fold(0.0f32, f32::max);
+        let square = sharpness(&l[4_800..19_200]);
+        let sine = sharpness(&l[28_800..43_200]);
+        assert!(square > 3.0 * sine, "{square} vs {sine}");
     }
 
     #[test]

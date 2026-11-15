@@ -7,6 +7,8 @@
 
 use std::f32::consts::TAU;
 
+use crate::wavetable::Wavetable;
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Waveform {
@@ -15,9 +17,12 @@ pub enum Waveform {
     Saw,
     Square,
     Triangle,
+    /// Reads the oscillator's wavetable (see [`crate::wavetable`]).
+    Wavetable,
 }
 
 impl Waveform {
+    /// The classic shapes computed directly (all but [`Waveform::Wavetable`]).
     pub const ALL: [Waveform; 4] = [Waveform::Sine, Waveform::Saw, Waveform::Square, Waveform::Triangle];
 }
 
@@ -85,8 +90,18 @@ impl Oscillator {
                 let naive = 4.0 * (t - 0.5).abs() - 1.0;
                 naive + 8.0 * dt * (poly_blamp(wrap(t + 0.5), dt) - poly_blamp(t, dt))
             }
+            // Played through `next_table`.
+            Waveform::Wavetable => 0.0,
         };
         self.phase = wrap(t + dt);
+        out
+    }
+
+    /// Next sample from a wavetable; `level` comes from [`Wavetable::level_for`].
+    #[inline]
+    pub fn next_table(&mut self, table: &Wavetable, position: f32, level: usize, dt: f32) -> f32 {
+        let out = table.sample(self.phase, position, level);
+        self.phase = wrap(self.phase + dt);
         out
     }
 }
@@ -111,6 +126,7 @@ mod tests {
                     Waveform::Square => if t < 0.5 { 1.0 } else { -1.0 },
                     Waveform::Triangle => 4.0 * (t - 0.5).abs() - 1.0,
                     Waveform::Sine => (t * TAU).sin(),
+                    Waveform::Wavetable => 0.0,
                 };
                 t = wrap(t + freq / SR);
                 v
@@ -159,6 +175,26 @@ mod tests {
             assert!(peak <= 1.2, "{wave:?} peak {peak}");
             assert!(mean.abs() < 0.01, "{wave:?} mean {mean}");
         }
+    }
+
+    #[test]
+    fn wavetable_plays_in_tune_without_aliasing() {
+        use crate::wavetable::{Wavetable, WavetableBank, WavetableKind};
+        let bank = WavetableBank::new();
+        // The end of the basic table is a square; compare with the naive square.
+        let table = bank.get(WavetableKind::Basic);
+        let play = |freq: f32, n: usize| {
+            let mut osc = Oscillator::default();
+            let level = Wavetable::level_for(freq / SR);
+            (0..n).map(|_| osc.next_table(table, 1.0, level, freq / SR)).collect::<Vec<f32>>()
+        };
+        let x = play(440.0, 48_000);
+        let rising = x.windows(2).filter(|w| w[0] < 0.0 && w[1] >= 0.0).count();
+        assert!((439..=441).contains(&rising), "{rising}");
+        let f0 = 2_830.0;
+        let ours = alias_share(&play(f0, 4800), f0);
+        let theirs = alias_share(&naive(Waveform::Square, f0, 4800), f0);
+        assert!(ours < theirs * 0.1, "{ours:.5} vs naive {theirs:.5}");
     }
 
     #[test]

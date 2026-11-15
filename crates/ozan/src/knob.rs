@@ -178,6 +178,18 @@ fn paint_wave(painter: &egui::Painter, rect: Rect, wave: Waveform, color: Color3
         Waveform::Saw => vec![p(0.0, -1.0), p(0.5, 1.0), p(0.5, -1.0), p(1.0, 1.0)],
         Waveform::Square => vec![p(0.0, 1.0), p(0.5, 1.0), p(0.5, -1.0), p(1.0, -1.0)],
         Waveform::Triangle => vec![p(0.0, 0.0), p(0.25, 1.0), p(0.75, -1.0), p(1.0, 0.0)],
+        Waveform::Wavetable => {
+            // Three waves stacked in depth, like frames of a table.
+            for (j, a) in [(0, 0.35f32), (1, 0.6), (2, 1.0)] {
+                let o = Vec2::new(-3.0 + 3.0 * j as f32, 3.0 - 3.0 * j as f32);
+                let pts: Vec<Pos2> = (0..=24)
+                    .map(|i| i as f32 / 24.0)
+                    .map(|t| p(t, (t * 2.0 * PI).sin() * (1.0 - 0.3 * j as f32) + 0.25 * (t * 6.0 * PI).sin() * j as f32 / 2.0) + o)
+                    .collect();
+                painter.add(egui::Shape::line(pts, Stroke::new(1.3, color.gamma_multiply(a))));
+            }
+            return;
+        }
     };
     painter.add(egui::Shape::line(points, Stroke::new(1.8, color)));
 }
@@ -214,14 +226,15 @@ pub fn wave_selector(ui: &mut egui::Ui, wave: &mut Waveform) -> bool {
     choice_row(
         ui,
         wave,
-        &Waveform::ALL,
-        Vec2::new(40.0, 26.0),
+        &[Waveform::Sine, Waveform::Saw, Waveform::Square, Waveform::Triangle, Waveform::Wavetable],
+        Vec2::new(36.0, 26.0),
         |p, r, w, c| paint_wave(p, r.shrink2(Vec2::new(9.0, 7.0)), w, c),
         |w| match w {
             Waveform::Sine => s().sine,
             Waveform::Saw => s().saw,
             Waveform::Square => s().square,
             Waveform::Triangle => s().triangle,
+            Waveform::Wavetable => s().wavetable,
         },
     )
 }

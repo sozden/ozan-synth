@@ -5,7 +5,8 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use eframe::egui::{self, Key, RichText, Vec2};
-use ozan_core::{AdsrParams, Event, OscParams, Patch};
+use ozan_core::wavetable::WavetableBank;
+use ozan_core::{AdsrParams, Event, ModDest, ModSource, OscParams, Patch, Waveform, WavetableKind};
 
 use crate::audio::{self, AudioOutput};
 use crate::i18n::{self, fill, s, Lang};
@@ -45,6 +46,8 @@ pub struct OzanApp {
     midi_glow: f32,
 
     patch: Patch,
+    /// Wavetables shared with the engine, here for drawing.
+    bank: Arc<WavetableBank>,
     presets: Vec<Preset>,
     /// Preset the patch came from (it may have been changed since).
     current: Option<usize>,
@@ -71,7 +74,8 @@ impl OzanApp {
         theme::select(&cc.egui_ctx, theme);
         let status = Arc::new(Status::default());
         let (events, rx) = Events::new(1024);
-        let audio = audio::open(rx, status.clone());
+        let bank = Arc::new(WavetableBank::new());
+        let audio = audio::open(rx, status.clone(), bank.clone());
         let mut app = Self {
             events,
             status,
@@ -84,6 +88,7 @@ impl OzanApp {
             seen_messages: 0,
             midi_glow: 0.0,
             patch: Patch::default(),
+            bank,
             pc_octave: 4,
             pc_held: HashMap::new(),
             mouse_note: None,
@@ -421,12 +426,13 @@ impl OzanApp {
         let before = self.patch;
         let lfo_now = self.status.lfo();
         let (wheel, aftertouch) = (self.status.wheel(), self.status.aftertouch());
+        let bank = self.bank.clone();
         let p = &mut self.patch;
         ui.spacing_mut().item_spacing = Vec2::new(12.0, 12.0);
         ui.horizontal_top(|ui| {
             for (i, osc) in p.osc.iter_mut().enumerate() {
                 let title = if i == 0 { s().osc1 } else { s().osc2 };
-                theme::section(ui, title, |ui| oscillator(ui, osc, i == 1));
+                theme::section(ui, title, |ui| oscillator(ui, osc, i == 1, &bank));
             }
             theme::section(ui, s().filter, |ui| {
                 knob::filter_mode_selector(ui, &mut p.filter.mode);
@@ -437,6 +443,19 @@ impl OzanApp {
                     Knob::new(s().resonance, &mut f.resonance, 0.0, 1.0).default_value(0.3).format(percent).show(ui);
                     Knob::new(s().env_amount, &mut f.env_amount, -1.0, 1.0).bipolar().default_value(0.4).format(signed_percent).show(ui);
                     Knob::new(s().key_track, &mut f.key_track, 0.0, 1.0).default_value(0.5).format(percent).show(ui);
+                });
+            });
+            theme::section(ui, s().unison, |ui| {
+                ui.add_space(30.0);
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = 2.0;
+                    let u = &mut p.unison;
+                    let mut copies = u.voices as f32;
+                    if Knob::new(s().unison_voices, &mut copies, 1.0, 7.0).integer().default_value(1.0).format(count).show(ui) {
+                        u.voices = copies as u8;
+                    }
+                    Knob::new(s().detune, &mut u.detune, 0.0, 100.0).default_value(20.0).format(cents_plain).show(ui);
+                    Knob::new(s().spread, &mut u.spread, 0.0, 1.0).default_value(0.6).format(percent).show(ui);
                 });
             });
         });
@@ -488,6 +507,7 @@ impl OzanApp {
                     Knob::new(s().bend, &mut p.bend_range, 0.0, 12.0).integer().default_value(2.0).format(bend).show(ui);
                 });
             });
+            theme::section(ui, s().mod_matrix, |ui| mod_matrix(ui, &mut p.mods));
         });
         ui.horizontal_top(|ui| {
             let fx = &mut p.fx;
@@ -596,8 +616,18 @@ fn cents(v: f32) -> String {
 
 /// Waveform buttons and pitch/level knobs of one oscillator. Only the second one
 /// gets a semitone knob (for intervals like a fifth).
-fn oscillator(ui: &mut egui::Ui, osc: &mut OscParams, semitones: bool) {
+fn oscillator(ui: &mut egui::Ui, osc: &mut OscParams, semitones: bool, bank: &WavetableBank) {
     knob::wave_selector(ui, &mut osc.wave);
+    if osc.wave == Waveform::Wavetable {
+        ui.horizontal(|ui| {
+            egui::ComboBox::from_id_salt(("table", semitones)).selected_text(i18n::table_name(osc.table)).width(118.0).show_ui(ui, |ui| {
+                for kind in WavetableKind::ALL {
+                    ui.selectable_value(&mut osc.table, kind, i18n::table_name(kind));
+                }
+            });
+            widgets::wave_display(ui, bank.get(osc.table).frame(osc.position), Vec2::new(ui.available_width().min(96.0), 22.0));
+        });
+    }
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 2.0;
         let mut octave = osc.octave as f32;
@@ -612,7 +642,50 @@ fn oscillator(ui: &mut egui::Ui, osc: &mut OscParams, semitones: bool) {
         }
         Knob::new(s().fine, &mut osc.fine, -50.0, 50.0).default_value(0.0).bipolar().format(cents).show(ui);
         Knob::new(s().level, &mut osc.level, 0.0, 1.0).format(percent).show(ui);
+        if osc.wave == Waveform::Wavetable {
+            Knob::new(s().position, &mut osc.position, 0.0, 1.0).default_value(0.0).format(percent).show(ui);
+        }
     });
+}
+
+/// Source, destination and amount for each matrix slot.
+fn mod_matrix(ui: &mut egui::Ui, slots: &mut [ozan_core::ModSlot]) {
+    let th = theme::t();
+    egui::Grid::new("mod_matrix").num_columns(3).spacing(Vec2::new(8.0, 4.0)).show(ui, |ui| {
+        for text in [s().source, s().destination, s().amount] {
+            ui.label(RichText::new(text).size(11.0).color(th.muted));
+        }
+        ui.end_row();
+        for (i, slot) in slots.iter_mut().enumerate() {
+            let active = slot.source != ModSource::Off;
+            egui::ComboBox::from_id_salt(("mod_src", i)).selected_text(i18n::source_name(slot.source)).width(108.0).show_ui(ui, |ui| {
+                for src in ModSource::ALL {
+                    ui.selectable_value(&mut slot.source, src, i18n::source_name(src));
+                }
+            });
+            ui.add_enabled_ui(active, |ui| {
+                egui::ComboBox::from_id_salt(("mod_dst", i)).selected_text(i18n::dest_name(slot.dest)).width(124.0).show_ui(ui, |ui| {
+                    for dst in ModDest::ALL {
+                        ui.selectable_value(&mut slot.dest, dst, i18n::dest_name(dst));
+                    }
+                });
+            });
+            ui.add_enabled(
+                active,
+                egui::Slider::new(&mut slot.amount, -1.0..=1.0).fixed_decimals(2).trailing_fill(true),
+            )
+            .on_hover_text("Double-click: 0");
+            ui.end_row();
+        }
+    });
+}
+
+fn count(v: f32) -> String {
+    format!("{}", v as i32)
+}
+
+fn cents_plain(v: f32) -> String {
+    format!("{v:.0} ct")
 }
 
 /// Four ADSR knobs and the shape they make.

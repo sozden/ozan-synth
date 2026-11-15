@@ -7,10 +7,12 @@
 use crate::envelope::AdsrParams;
 use crate::filter::FilterMode;
 use crate::lfo::LfoWave;
+use crate::modmatrix::{ModSlot, SLOTS};
 use crate::oscillator::Waveform;
+use crate::wavetable::WavetableKind;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize), serde(default))]
 pub struct OscParams {
     pub wave: Waveform,
     /// -3..3 octaves.
@@ -21,6 +23,16 @@ pub struct OscParams {
     pub fine: f32,
     /// 0..1.
     pub level: f32,
+    /// Table read when `wave` is [`Waveform::Wavetable`].
+    pub table: WavetableKind,
+    /// Place in the table, 0..1.
+    pub position: f32,
+}
+
+impl Default for OscParams {
+    fn default() -> Self {
+        Self { wave: Waveform::Saw, octave: 0, semitones: 0, fine: 0.0, level: 0.8, table: WavetableKind::Basic, position: 0.0 }
+    }
 }
 
 impl OscParams {
@@ -148,6 +160,24 @@ impl Default for ReverbParams {
     }
 }
 
+/// Several detuned copies of each oscillator per note, spread across the stereo field.
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize), serde(default))]
+pub struct UnisonParams {
+    /// Copies per oscillator, 1..7.
+    pub voices: u8,
+    /// Spread of the outermost copies, cents (0..100).
+    pub detune: f32,
+    /// Stereo width, 0..1.
+    pub spread: f32,
+}
+
+impl Default for UnisonParams {
+    fn default() -> Self {
+        Self { voices: 1, detune: 20.0, spread: 0.6 }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize), serde(default))]
 pub struct EffectsParams {
@@ -167,6 +197,8 @@ pub struct Patch {
     pub wheel: WheelParams,
     /// Pitch-bend range in semitones each way (0..12).
     pub bend_range: f32,
+    pub unison: UnisonParams,
+    pub mods: [ModSlot; SLOTS],
     pub fx: EffectsParams,
     /// 0..1.
     pub volume: f32,
@@ -177,8 +209,8 @@ impl Default for Patch {
     fn default() -> Self {
         Self {
             osc: [
-                OscParams { wave: Waveform::Saw, octave: 0, semitones: 0, fine: 0.0, level: 0.8 },
-                OscParams { wave: Waveform::Saw, octave: 0, semitones: 0, fine: 7.0, level: 0.6 },
+                OscParams { wave: Waveform::Saw, level: 0.8, ..OscParams::default() },
+                OscParams { wave: Waveform::Saw, fine: 7.0, level: 0.6, ..OscParams::default() },
             ],
             filter: FilterParams { mode: FilterMode::Lp24, cutoff: 800.0, resonance: 0.3, env_amount: 0.4, key_track: 0.5 },
             filter_env: AdsrParams { attack: 0.005, decay: 0.5, sustain: 0.3, release: 0.5 },
@@ -186,6 +218,8 @@ impl Default for Patch {
             lfo: LfoParams::default(),
             wheel: WheelParams::default(),
             bend_range: 2.0,
+            unison: UnisonParams::default(),
+            mods: [ModSlot::default(); SLOTS],
             fx: EffectsParams::default(),
             volume: 0.7,
         }

@@ -149,7 +149,11 @@ pub fn apply(ctx: &egui::Context) {
     visuals.selection.bg_fill = th.accent_dark;
     visuals.widgets.hovered.bg_stroke.color = th.accent;
     visuals.override_text_color = Some(th.text);
-    ctx.set_visuals(visuals);
+    // The panel is always dark; without this egui follows a light Windows theme
+    // and draws its own widgets (menus, sliders) light and blue.
+    ctx.set_theme(egui::ThemePreference::Dark);
+    ctx.set_visuals_of(egui::Theme::Dark, visuals.clone());
+    ctx.set_visuals_of(egui::Theme::Light, visuals);
 }
 
 /// Index of the theme saved under `key`.

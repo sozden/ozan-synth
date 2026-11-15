@@ -101,6 +101,14 @@ mod tests {
         patch.remove("lfo");
         patch.remove("wheel");
         patch.remove("bend_range");
+        // Stage 4 had no unison, matrix or wavetable fields either.
+        patch.remove("unison");
+        patch.remove("mods");
+        for osc in patch["osc"].as_array_mut().unwrap() {
+            let osc = osc.as_object_mut().unwrap();
+            osc.remove("table");
+            osc.remove("position");
+        }
         let back: PresetFile = serde_json::from_value(value).unwrap();
         assert_eq!(back.patch, Patch::default());
     }

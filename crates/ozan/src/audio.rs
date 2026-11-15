@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, SampleFormat, SizedSample};
+use ozan_core::wavetable::WavetableBank;
 use ozan_core::{Engine, Event};
 
 use crate::shared::Status;
@@ -16,17 +17,17 @@ pub struct AudioOutput {
     pub name: String,
 }
 
-pub fn open(events: rtrb::Consumer<Event>, status: Arc<Status>) -> Result<AudioOutput, String> {
+pub fn open(events: rtrb::Consumer<Event>, status: Arc<Status>, bank: Arc<WavetableBank>) -> Result<AudioOutput, String> {
     let host = cpal::default_host();
     let device = host.default_output_device().ok_or(crate::i18n::s().no_audio_device)?;
     let name = device.description().map(|d| d.name().to_string()).unwrap_or_else(|_| device.to_string());
     let supported = device.default_output_config().map_err(|e| e.to_string())?;
     let config = supported.config();
     let stream = match supported.sample_format() {
-        SampleFormat::F32 => build::<f32>(&device, config, events, status),
-        SampleFormat::I16 => build::<i16>(&device, config, events, status),
-        SampleFormat::U16 => build::<u16>(&device, config, events, status),
-        SampleFormat::I32 => build::<i32>(&device, config, events, status),
+        SampleFormat::F32 => build::<f32>(&device, config, events, status, bank),
+        SampleFormat::I16 => build::<i16>(&device, config, events, status, bank),
+        SampleFormat::U16 => build::<u16>(&device, config, events, status, bank),
+        SampleFormat::I32 => build::<i32>(&device, config, events, status, bank),
         other => return Err(crate::i18n::fill(crate::i18n::s().sample_format, &[&format!("{other:?}")])),
     }?;
     stream.play().map_err(|e| e.to_string())?;
@@ -38,9 +39,10 @@ fn build<T: SizedSample + FromSample<f32>>(
     config: cpal::StreamConfig,
     mut events: rtrb::Consumer<Event>,
     status: Arc<Status>,
+    bank: Arc<WavetableBank>,
 ) -> Result<cpal::Stream, String> {
     let channels = config.channels.max(1) as usize;
-    let mut engine = Engine::new(config.sample_rate as f32);
+    let mut engine = Engine::with_bank(config.sample_rate as f32, bank);
     // Grown on the first callback only, then reused.
     let mut left: Vec<f32> = Vec::with_capacity(8192);
     let mut right: Vec<f32> = Vec::with_capacity(8192);

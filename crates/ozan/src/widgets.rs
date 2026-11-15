@@ -200,3 +200,21 @@ pub fn toggle(ui: &mut egui::Ui, on: &mut bool, label: &str) -> bool {
     })
     .inner
 }
+
+/// One wavetable frame drawn on a small screen.
+pub fn wave_display(ui: &mut egui::Ui, frame: &[f32], size: Vec2) {
+    let th = theme::t();
+    let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
+    let painter = ui.painter_at(rect);
+    painter.rect_filled(rect, 4.0, th.screen);
+    let r = rect.shrink2(Vec2::new(4.0, 5.0));
+    painter.line_segment([Pos2::new(r.left(), r.center().y), Pos2::new(r.right(), r.center().y)], Stroke::new(0.5, th.track));
+    let n = 96;
+    let points: Vec<Pos2> = (0..=n)
+        .map(|i| {
+            let idx = (i * (frame.len() - 1)) / n;
+            Pos2::new(r.left() + i as f32 / n as f32 * r.width(), r.center().y - frame[idx] * r.height() * 0.5)
+        })
+        .collect();
+    painter.add(egui::Shape::line(points, Stroke::new(1.6, th.accent)));
+}

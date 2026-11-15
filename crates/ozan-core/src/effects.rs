@@ -87,8 +87,8 @@ impl Chorus {
     }
 
     #[inline]
-    fn process(&mut self, x: f32, p: &ChorusParams, wet: f32, sr: f32) -> (f32, f32) {
-        self.line.write(x);
+    fn process(&mut self, dry_l: f32, dry_r: f32, p: &ChorusParams, wet: f32, sr: f32) -> (f32, f32) {
+        self.line.write(0.5 * (dry_l + dry_r));
         let base = 0.010 * sr;
         let depth = p.depth.clamp(0.0, 1.0) * 0.006 * sr;
         let s = |ph: f32| 0.5 + 0.5 * (ph * TAU).sin();
@@ -97,7 +97,7 @@ impl Chorus {
         self.phase = (self.phase + p.rate.max(0.0) / sr).fract();
         // At full mix half dry, half delayed, as on classic chorus units.
         let w = 0.5 * wet;
-        (x * (1.0 - w) + l * w, x * (1.0 - w) + r * w)
+        (dry_l * (1.0 - w) + l * w, dry_r * (1.0 - w) + r * w)
     }
 }
 
@@ -260,7 +260,7 @@ impl Effects {
     }
 
     #[inline]
-    pub fn process(&mut self, x: f32, p: &EffectsParams) -> (f32, f32) {
+    pub fn process(&mut self, l: f32, r: f32, p: &EffectsParams) -> (f32, f32) {
         let sr = self.sample_rate;
         let k = smoothing(0.02, sr);
         let targets = [
@@ -271,7 +271,7 @@ impl Effects {
         for (w, t) in self.wet.iter_mut().zip(targets) {
             *w += (t - *w) * k;
         }
-        let (l, r) = self.chorus.process(x, &p.chorus, self.wet[0], sr);
+        let (l, r) = self.chorus.process(l, r, &p.chorus, self.wet[0], sr);
         let (l, r) = self.delay.process(l, r, &p.delay, self.wet[1], sr);
         self.reverb.process(l, r, &p.reverb, self.wet[2], sr)
     }
@@ -284,7 +284,7 @@ mod tests {
     const SR: f32 = 48_000.0;
 
     fn run(fx: &mut Effects, p: &EffectsParams, input: &[f32]) -> (Vec<f32>, Vec<f32>) {
-        input.iter().map(|&x| fx.process(x, p)).unzip()
+        input.iter().map(|&x| fx.process(x, x, p)).unzip()
     }
 
     fn impulse(n: usize) -> Vec<f32> {

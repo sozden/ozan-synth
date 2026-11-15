@@ -64,9 +64,20 @@ impl Filter {
     /// whistles at the cutoff).
     #[inline]
     pub fn process(&mut self, x: f32, mode: FilterMode, cutoff: f32, resonance: f32, sample_rate: f32) -> f32 {
+        let (g, k) = Self::coefficients(cutoff, resonance, sample_rate);
+        self.process_with(x, mode, g, k)
+    }
+
+    /// `(g, k)` for [`Filter::process_with`]; worth sharing between the two filters
+    /// of a stereo voice.
+    #[inline]
+    pub fn coefficients(cutoff: f32, resonance: f32, sample_rate: f32) -> (f32, f32) {
         let fc = cutoff.clamp(20.0, sample_rate * 0.45);
-        let g = (PI * fc / sample_rate).tan();
-        let k = 2.0 - 1.95 * resonance.clamp(0.0, 1.0);
+        ((PI * fc / sample_rate).tan(), 2.0 - 1.95 * resonance.clamp(0.0, 1.0))
+    }
+
+    #[inline]
+    pub fn process_with(&mut self, x: f32, mode: FilterMode, g: f32, k: f32) -> f32 {
         match mode {
             FilterMode::Lp12 => self.a.process(x, g, k).low,
             FilterMode::Lp24 => {

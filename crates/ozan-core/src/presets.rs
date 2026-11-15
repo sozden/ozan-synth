@@ -7,14 +7,29 @@
 use crate::envelope::AdsrParams;
 use crate::filter::FilterMode;
 use crate::lfo::LfoWave;
+use crate::modmatrix::{ModDest, ModSlot, ModSource, SLOTS};
 use crate::oscillator::Waveform;
-use crate::patch::{ChorusParams, DelayParams, EffectsParams, FilterParams, LfoParams, OscParams, Patch, ReverbParams, WheelParams};
+use crate::wavetable::WavetableKind;
+use crate::patch::{ChorusParams, DelayParams, EffectsParams, FilterParams, LfoParams, OscParams, Patch, ReverbParams, UnisonParams, WheelParams};
 
 fn osc(wave: Waveform, octave: i8, semitones: i8, fine: f32, level: f32) -> OscParams {
-    OscParams { wave, octave, semitones, fine, level }
+    OscParams { wave, octave, semitones, fine, level, ..OscParams::default() }
 }
 
-const OFF: OscParams = OscParams { wave: Waveform::Sine, octave: 0, semitones: 0, fine: 0.0, level: 0.0 };
+/// A wavetable oscillator.
+fn wt(table: WavetableKind, position: f32, octave: i8, fine: f32, level: f32) -> OscParams {
+    OscParams { wave: Waveform::Wavetable, octave, fine, level, table, position, ..OscParams::default() }
+}
+
+const OFF: OscParams = OscParams {
+    wave: Waveform::Sine,
+    octave: 0,
+    semitones: 0,
+    fine: 0.0,
+    level: 0.0,
+    table: WavetableKind::Basic,
+    position: 0.0,
+};
 
 fn filter(mode: FilterMode, cutoff: f32, resonance: f32, env_amount: f32, key_track: f32) -> FilterParams {
     FilterParams { mode, cutoff, resonance, env_amount, key_track }
@@ -44,6 +59,17 @@ fn reverb(size: f32, decay: f32, damping: f32, predelay_ms: f32, mix: f32) -> Op
 fn fx(c: Option<ChorusParams>, d: Option<DelayParams>, r: Option<ReverbParams>) -> EffectsParams {
     let off = EffectsParams::default();
     EffectsParams { chorus: c.unwrap_or(off.chorus), delay: d.unwrap_or(off.delay), reverb: r.unwrap_or(off.reverb) }
+}
+
+fn unison(voices: u8, detune: f32, spread: f32) -> UnisonParams {
+    UnisonParams { voices, detune, spread }
+}
+
+/// Matrix slots in use; the rest stay off.
+fn mods(slots: &[ModSlot]) -> [ModSlot; SLOTS] {
+    let mut all = [ModSlot::default(); SLOTS];
+    all[..slots.len()].copy_from_slice(slots);
+    all
 }
 
 /// Built-in presets, in the order they appear in the list.
@@ -168,6 +194,85 @@ pub fn factory() -> Vec<(&'static str, Patch)> {
                 amp_env: adsr(0.001, 1.5, 0.0, 1.5),
                 fx: fx(None, delay(450.0, 0.45, 3000.0, true, 0.3), reverb(0.9, 6.0, 0.3, 30.0, 0.5)),
                 volume: 0.53,
+                ..d
+            },
+        ),
+        (
+            "Supersaw",
+            Patch {
+                osc: [osc(Saw, 0, 0, 0.0, 0.9), OFF],
+                unison: unison(7, 25.0, 0.8),
+                filter: filter(Lp24, 3500.0, 0.1, 0.2, 0.4),
+                filter_env: adsr(0.005, 0.5, 0.4, 0.4),
+                amp_env: adsr(0.01, 0.3, 0.9, 0.5),
+                fx: fx(None, None, reverb(0.5, 2.5, 0.4, 15.0, 0.25)),
+                volume: 0.75,
+                ..d
+            },
+        ),
+        (
+            "Vowel Pad",
+            Patch {
+                osc: [wt(WavetableKind::Vowels, 0.0, 0, 0.0, 1.0), wt(WavetableKind::Vowels, 0.5, 0, 8.0, 0.8)],
+                unison: unison(3, 12.0, 0.6),
+                filter: filter(Lp12, 5000.0, 0.0, 0.0, 0.2),
+                amp_env: adsr(0.6, 1.0, 0.9, 2.0),
+                lfo: lfo(LfoWave::Triangle, 0.15, 0.0, 0.0, 0.0),
+                mods: mods(&[
+                    ModSlot::new(ModSource::Lfo, ModDest::Osc1Position, 0.5),
+                    ModSlot::new(ModSource::Lfo, ModDest::Osc2Position, -0.4),
+                ]),
+                fx: fx(chorus(0.4, 0.6, 0.6), None, reverb(0.8, 4.0, 0.5, 25.0, 0.4)),
+                volume: 0.9,
+                ..d
+            },
+        ),
+        (
+            "PWM Strings",
+            Patch {
+                osc: [wt(WavetableKind::Pulse, 0.3, 0, -6.0, 0.7), wt(WavetableKind::Pulse, 0.3, 0, 6.0, 0.7)],
+                filter: filter(Lp24, 2500.0, 0.1, 0.15, 0.5),
+                amp_env: adsr(0.25, 0.5, 0.85, 0.8),
+                lfo: lfo(LfoWave::Sine, 0.5, 0.0, 0.0, 0.0),
+                mods: mods(&[
+                    ModSlot::new(ModSource::Lfo, ModDest::Osc1Position, 0.35),
+                    ModSlot::new(ModSource::Lfo, ModDest::Osc2Position, -0.35),
+                ]),
+                fx: fx(chorus(0.5, 0.5, 0.5), None, reverb(0.6, 2.2, 0.4, 15.0, 0.25)),
+                volume: 0.7,
+                ..d
+            },
+        ),
+        (
+            "Sync Lead",
+            Patch {
+                osc: [wt(WavetableKind::Sync, 0.1, 0, 0.0, 0.9), OFF],
+                filter: filter(Lp24, 4000.0, 0.2, 0.2, 0.5),
+                filter_env: adsr(0.002, 0.6, 0.1, 0.3),
+                amp_env: adsr(0.005, 0.2, 1.0, 0.3),
+                mods: mods(&[
+                    ModSlot::new(ModSource::FilterEnv, ModDest::Osc1Position, 0.8),
+                    ModSlot::new(ModSource::Wheel, ModDest::Osc1Position, 0.5),
+                    ModSlot::new(ModSource::Velocity, ModDest::Cutoff, 0.3),
+                ]),
+                fx: fx(None, delay(350.0, 0.3, 4000.0, true, 0.2), None),
+                volume: 0.75,
+                ..d
+            },
+        ),
+        (
+            "Harmonic Keys",
+            Patch {
+                osc: [wt(WavetableKind::Harmonics, 0.2, 0, 0.0, 1.0), OFF],
+                filter: filter(Lp12, 6000.0, 0.0, 0.0, 0.0),
+                amp_env: adsr(0.002, 1.2, 0.3, 0.6),
+                mods: mods(&[
+                    ModSlot::new(ModSource::Velocity, ModDest::Osc1Position, 0.7),
+                    ModSlot::new(ModSource::Velocity, ModDest::Volume, 0.4),
+                    ModSlot::new(ModSource::Note, ModDest::Cutoff, 0.3),
+                ]),
+                fx: fx(None, None, reverb(0.5, 1.8, 0.4, 10.0, 0.2)),
+                volume: 0.93,
                 ..d
             },
         ),
