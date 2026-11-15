@@ -123,6 +123,9 @@ impl<'a> Knob<'a> {
             }
         }
         let norm = self.value_to_norm(*self.value);
+        if *self.value != before || response.dragged() {
+            crate::lcd::touch(self.label, (self.format)(*self.value), norm, self.bipolar, ui.input(|i| i.time));
+        }
 
         let painter = ui.painter_at(rect);
         let center = Pos2::new(rect.center().x, rect.top() + 28.0);

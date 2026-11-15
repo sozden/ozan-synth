@@ -35,6 +35,7 @@ pub struct Status {
     midi_messages: AtomicU32,
     /// Controllers as f32 bits, for the panel's displays.
     wheel: AtomicU32,
+    bend: AtomicU32,
     aftertouch: AtomicU32,
     lfo: AtomicU32,
     lfo2: AtomicU32,
@@ -81,6 +82,14 @@ impl Status {
 
     pub fn set_aftertouch(&self, v: f32) {
         self.aftertouch.store(v.to_bits(), Ordering::Relaxed);
+    }
+
+    pub fn set_bend(&self, v: f32) {
+        self.bend.store(v.to_bits(), Ordering::Relaxed);
+    }
+
+    pub fn bend(&self) -> f32 {
+        f32::from_bits(self.bend.load(Ordering::Relaxed))
     }
 
     pub fn wheel(&self) -> f32 {

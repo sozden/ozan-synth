@@ -203,6 +203,7 @@ impl OzanApp {
     }
 
     fn header(&mut self, ui: &mut egui::Ui) {
+        let mut bar_right = 0.0;
         ui.horizontal(|ui| {
             let th = theme::t();
             ozan_ui::logo::lockup(ui, 22.0, th.text, th.accent, th.muted).on_hover_text("OZAN Synth — open-source synthesizer");
@@ -211,6 +212,7 @@ impl OzanApp {
             if let Some(i) = self.bar.bar(ui, &mut self.patch) {
                 self.preset_loaded(i);
             }
+            bar_right = ui.min_rect().right();
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| match &self.audio {
                 Ok(a) => {
                     ui.label(RichText::new(format!("{} · {:.1} kHz", a.name, a.sample_rate as f32 / 1000.0)).color(theme::t().muted));
@@ -286,6 +288,12 @@ impl OzanApp {
                 }
             });
         });
+        // The screen spans both header rows, right of the preset selector.
+        let r = ui.min_rect();
+        let rect = egui::Rect::from_min_size(egui::pos2(bar_right + 28.0, r.top()), egui::vec2(340.0, r.height()));
+        let rate = self.audio.as_ref().ok().map(|a| a.sample_rate as f32);
+        let idle = ozan_ui::lcd::idle_line(&self.patch, Some(self.status.voices()), rate);
+        ozan_ui::lcd::show_at(ui, rect, &ozan_ui::lcd::preset_line(&self.bar, &self.patch), &idle);
     }
 
     fn keyboard(&mut self, ui: &mut egui::Ui) {
@@ -299,7 +307,24 @@ impl OzanApp {
         });
         ui.add_space(4.0);
         let height = ui.available_height().clamp(90.0, 170.0);
-        for (note, velocity) in widgets::piano(ui, PIANO_LOW, PIANO_HIGH, held, &mut self.mouse_note, height) {
+        let mut pressed = Vec::new();
+        ui.horizontal(|ui| {
+            // The wheels follow the controller and can be moved with the mouse.
+            let size = egui::vec2(34.0, height);
+            let mut bend = self.status.bend();
+            if widgets::wheel(ui, s().pitch_wheel, &mut bend, true, size) {
+                self.status.set_bend(bend);
+                self.events.send(Event::PitchBend(bend));
+            }
+            let mut wheel = self.status.wheel();
+            if widgets::wheel(ui, s().mod_wheel, &mut wheel, false, size) {
+                self.status.set_wheel(wheel);
+                self.events.send(Event::ModWheel(wheel));
+            }
+            ui.add_space(6.0);
+            pressed = widgets::piano(ui, PIANO_LOW, PIANO_HIGH, held, &mut self.mouse_note, height);
+        });
+        for (note, velocity) in pressed {
             match velocity {
                 Some(v) => self.note_on(note, v),
                 None => self.note_off(note),

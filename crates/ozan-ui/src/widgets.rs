@@ -218,3 +218,82 @@ pub fn wave_display(ui: &mut egui::Ui, frame: &[f32], size: Vec2) {
         .collect();
     painter.add(egui::Shape::line(points, Stroke::new(1.6, th.accent)));
 }
+
+/// The last couple of seconds of `value` (-1..1) scrolling across a small screen.
+pub fn lcd_trace(ui: &mut egui::Ui, id: &str, value: f32, size: Vec2) {
+    let th = theme::t();
+    let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
+    let id = ui.id().with(id);
+    const LEN: usize = 150;
+    let mut history = ui.data_mut(|d| d.get_temp::<Vec<f32>>(id)).unwrap_or_default();
+    history.push(value.clamp(-1.0, 1.0));
+    if history.len() > LEN {
+        history.drain(..history.len() - LEN);
+    }
+    let painter = ui.painter_at(rect.expand(2.0));
+    crate::lcd::glass(&painter, rect);
+    let inner = rect.shrink2(Vec2::new(6.0, 8.0));
+    painter.line_segment([inner.left_center(), inner.right_center()], Stroke::new(1.0, th.lcd_ink.gamma_multiply(0.15)));
+    let step = inner.width() / (LEN - 1) as f32;
+    let start = LEN - history.len();
+    let points: Vec<Pos2> = history
+        .iter()
+        .enumerate()
+        .map(|(i, v)| Pos2::new(inner.left() + (start + i) as f32 * step, inner.center().y - v * inner.height() * 0.5))
+        .collect();
+    if let Some(&last) = points.last() {
+        painter.add(egui::Shape::line(points, Stroke::new(1.8, th.lcd_ink)));
+        painter.circle_filled(last, 3.0, th.lcd_ink);
+    }
+    ui.data_mut(|d| d.insert_temp(id, history));
+}
+
+/// A pitch or mod wheel in its slot. `value` is -1..1 when `spring` (pitch: it
+/// returns to the middle when let go), else 0..1. Drag up and down. Returns true
+/// when the value changed.
+pub fn wheel(ui: &mut egui::Ui, label: &str, value: &mut f32, spring: bool, size: Vec2) -> bool {
+    let th = theme::t();
+    let (rect, response) = ui.allocate_exact_size(size, Sense::drag());
+    let slot = Rect::from_min_size(rect.min, Vec2::new(size.x, size.y - 18.0));
+    let before = *value;
+    let (lo, hi) = if spring { (-1.0, 1.0) } else { (0.0, 1.0) };
+    if response.dragged() {
+        *value = (*value - response.drag_delta().y / (slot.height() * 0.45) * (hi - lo) / 2.0).clamp(lo, hi);
+    }
+    if spring && response.drag_stopped() {
+        *value = 0.0;
+    }
+    let painter = ui.painter_at(rect);
+    painter.rect_filled(slot, 6.0, th.screen);
+    painter.rect_stroke(slot, 6.0, Stroke::new(1.0, th.track), StrokeKind::Inside);
+    let body = slot.shrink(5.0);
+    painter.rect_filled(body, 4.0, th.skirt);
+    // Ridges that roll with the wheel, darker towards the ends (the curve of the drum).
+    let roll = *value * 40.0;
+    let pitch = 9.0;
+    let mut y = body.top() + roll.rem_euclid(pitch);
+    while y < body.bottom() {
+        let t = ((y - body.center().y) / (body.height() / 2.0)).abs();
+        painter.line_segment([Pos2::new(body.left(), y), Pos2::new(body.right(), y)], Stroke::new(1.6, th.bg.gamma_multiply(0.5 + 0.5 * t)));
+        y += pitch;
+    }
+    for (band, alpha) in [(0.0, 120u8), (0.12, 60)] {
+        let h = body.height() * (0.1 + band);
+        painter.rect_filled(Rect::from_min_size(body.min, Vec2::new(body.width(), h * 0.5)), 0.0, Color32::from_black_alpha(alpha));
+        painter.rect_filled(Rect::from_min_max(Pos2::new(body.left(), body.bottom() - h * 0.5), body.max), 0.0, Color32::from_black_alpha(alpha));
+    }
+    // Position mark.
+    let travel = body.height() * 0.42;
+    let my = if spring { body.center().y - *value * travel } else { body.center().y + travel - *value * 2.0 * travel };
+    let mark = if spring { th.pointer } else { th.accent };
+    painter.rect_filled(Rect::from_center_size(Pos2::new(body.center().x, my), Vec2::new(body.width(), 4.0)), 1.0, mark);
+    let active = response.hovered() || response.dragged();
+    painter.text(
+        Pos2::new(rect.center().x, rect.bottom() - 7.0),
+        egui::Align2::CENTER_CENTER,
+        label,
+        egui::FontId::proportional(11.0),
+        if active { th.accent } else { th.muted },
+    );
+    *value != before
+}

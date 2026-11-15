@@ -3,6 +3,7 @@
 
 pub mod i18n;
 pub mod knob;
+pub mod lcd;
 pub mod learn;
 pub mod logo;
 pub mod panel;

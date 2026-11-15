@@ -50,6 +50,9 @@ pub struct Theme {
     pub vu_ink: Color32,
     pub wood_base: Color32,
     pub wood_grain: Color32,
+    /// Glass and lettering of the small displays.
+    pub lcd_bg: Color32,
+    pub lcd_ink: Color32,
 }
 
 const fn rgb(r: u8, g: u8, b: u8) -> Color32 {
@@ -84,6 +87,8 @@ pub static THEMES: [Theme; 2] = [
         vu_ink: rgb(0x2a, 0x24, 0x1c),
         wood_base: rgb(0x6b, 0x3f, 0x1f),
         wood_grain: rgb(0x4a, 0x2a, 0x12),
+        lcd_bg: rgb(0x1d, 0x14, 0x09),
+        lcd_ink: rgb(0xff, 0xb3, 0x47),
     },
     Theme {
         key: "night",
@@ -112,6 +117,8 @@ pub static THEMES: [Theme; 2] = [
         vu_ink: rgb(0x26, 0x24, 0x22),
         wood_base: rgb(0, 0, 0),
         wood_grain: rgb(0, 0, 0),
+        lcd_bg: rgb(0x0b, 0x13, 0x1f),
+        lcd_ink: rgb(0x9a, 0xe4, 0xff),
     },
 ];
 
@@ -180,6 +187,13 @@ pub fn section_box<R>(ui: &mut egui::Ui, key: &'static str, title: &str, size: V
 }
 
 fn section_sized<R>(ui: &mut egui::Ui, title: &str, size: Option<Vec2>, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
+    // Knobs tell the display which section they are in.
+    let add = |ui: &mut egui::Ui| {
+        let before = crate::lcd::set_section(title);
+        let out = add(ui);
+        crate::lcd::set_section_back(before);
+        out
+    };
     let th = t();
     match th.section_style {
         SectionStyle::Card => {

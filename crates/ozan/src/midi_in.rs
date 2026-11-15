@@ -51,6 +51,7 @@ pub fn connect(name: &str, events: Events, status: Arc<Status>, mut controllers:
                     Some(event) => {
                         match event {
                             Event::ModWheel(v) => status.set_wheel(v),
+                            Event::PitchBend(v) => status.set_bend(v),
                             Event::Aftertouch(v) => status.set_aftertouch(v),
                             _ => {}
                         }

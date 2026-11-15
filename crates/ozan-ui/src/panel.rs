@@ -158,7 +158,7 @@ pub fn panel(ui: &mut egui::Ui, p: &mut Patch, bank: &WavetableBank, m: &Meters)
     let lower = row(LOWER).max(left);
     match tab {
         Tab::Modulation => {
-            let w = widths(ui, &[250.0, 210.0, 370.0, 400.0]);
+            let w = widths(ui, &[250.0, 220.0, 370.0, 470.0]);
             ui.horizontal_top(|ui| {
                 theme::section_box(ui, "lfo", s().lfo, Vec2::new(w[0], lower), |ui| {
                     ui.horizontal(|ui| {
@@ -183,7 +183,11 @@ pub fn panel(ui: &mut egui::Ui, p: &mut Patch, bank: &WavetableBank, m: &Meters)
                         let th = theme::t();
                         widgets::led(ui, th.accent.gamma_multiply(0.12 + 0.88 * (0.5 + 0.5 * m.lfo2))).on_hover_text(s().lfo2_hint);
                     });
-                    Knob::keyed("rate", s().rate, &mut p.lfo2.rate, 0.02, 20.0).log().default_value(0.5).format(rate).show(ui);
+                    ui.horizontal(|ui| {
+                        Knob::keyed("rate", s().rate, &mut p.lfo2.rate, 0.02, 20.0).log().default_value(0.5).format(rate).show(ui);
+                        let size = Vec2::new(ui.available_width(), 80.0);
+                        widgets::lcd_trace(ui, "lfo2_trace", m.lfo2, size);
+                    });
                 });
                 theme::section_box(ui, "mod_env", s().mod_env, Vec2::new(w[2], lower), |ui| {
                     ui.add_space(32.0);
@@ -368,36 +372,110 @@ pub fn oscillator(ui: &mut egui::Ui, osc: &mut OscParams, semitones: bool, bank:
     });
 }
 
-/// Source, destination and amount for each matrix slot.
+/// Column widths of the matrix: slot number, source, arrow, destination, amount bar, amount.
+const MATRIX: [f32; 6] = [14.0, 116.0, 14.0, 132.0, 118.0, 40.0];
+
+/// Source, destination and amount for each matrix slot, as rows of small screens.
 pub fn mod_matrix(ui: &mut egui::Ui, slots: &mut [ozan_core::ModSlot]) {
     let th = theme::t();
-    egui::Grid::new("mod_matrix").num_columns(3).spacing(Vec2::new(8.0, 4.0)).show(ui, |ui| {
-        for text in [s().source, s().destination, s().amount] {
-            ui.label(RichText::new(text).size(11.0).color(th.muted));
-        }
-        ui.end_row();
-        for (i, slot) in slots.iter_mut().enumerate() {
-            let active = slot.source != ModSource::Off;
-            egui::ComboBox::from_id_salt(("mod_src", i)).selected_text(i18n::source_name(slot.source)).width(108.0).show_ui(ui, |ui| {
-                for src in ModSource::ALL {
-                    ui.selectable_value(&mut slot.source, src, i18n::source_name(src));
-                }
-            });
-            ui.add_enabled_ui(active, |ui| {
-                egui::ComboBox::from_id_salt(("mod_dst", i)).selected_text(i18n::dest_name(slot.dest)).width(124.0).show_ui(ui, |ui| {
-                    for dst in ModDest::ALL {
-                        ui.selectable_value(&mut slot.dest, dst, i18n::dest_name(dst));
-                    }
-                });
-            });
-            ui.add_enabled(
-                active,
-                egui::Slider::new(&mut slot.amount, -1.0..=1.0).fixed_decimals(2).trailing_fill(true),
-            )
-            .on_hover_text("Double-click: 0");
-            ui.end_row();
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 6.0;
+        for (w, text) in [(MATRIX[0], ""), (MATRIX[1], s().source), (MATRIX[2], ""), (MATRIX[3], s().destination), (MATRIX[4] + 6.0 + MATRIX[5], s().amount)] {
+            let (r, _) = ui.allocate_exact_size(Vec2::new(w, 12.0), egui::Sense::hover());
+            ui.painter().text(r.left_center(), egui::Align2::LEFT_CENTER, text, egui::FontId::proportional(11.0), th.muted);
         }
     });
+    for (i, slot) in slots.iter_mut().enumerate() {
+        let active = slot.source != ModSource::Off;
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 6.0;
+            let (r, _) = ui.allocate_exact_size(Vec2::new(MATRIX[0], 22.0), egui::Sense::hover());
+            ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, (i + 1).to_string(), egui::FontId::monospace(11.0), th.muted);
+            lcd_pick(ui, ("mod_src", i), MATRIX[1], true, &mut slot.source, &ModSource::ALL, i18n::source_name);
+            let (r, _) = ui.allocate_exact_size(Vec2::new(MATRIX[2], 22.0), egui::Sense::hover());
+            let c = if active { th.muted } else { th.track };
+            let (a, b) = (r.center() - Vec2::new(5.0, 0.0), r.center() + Vec2::new(5.0, 0.0));
+            ui.painter().line_segment([a, b], egui::Stroke::new(1.5, c));
+            ui.painter().line_segment([b, b + Vec2::new(-3.5, -3.5)], egui::Stroke::new(1.5, c));
+            ui.painter().line_segment([b, b + Vec2::new(-3.5, 3.5)], egui::Stroke::new(1.5, c));
+            lcd_pick(ui, ("mod_dst", i), MATRIX[3], active, &mut slot.dest, &ModDest::ALL, i18n::dest_name);
+            amount_bar(ui, active, &mut slot.amount);
+        });
+    }
+}
+
+/// A choice shown on a small screen; a click opens the list.
+fn lcd_pick<T: Copy + PartialEq>(
+    ui: &mut egui::Ui,
+    id: impl std::hash::Hash,
+    width: f32,
+    enabled: bool,
+    value: &mut T,
+    options: &[T],
+    name: fn(T) -> &'static str,
+) {
+    let th = theme::t();
+    let sense = if enabled { egui::Sense::click() } else { egui::Sense::hover() };
+    let (rect, response) = ui.allocate_exact_size(Vec2::new(width, 22.0), sense);
+    let popup = ui.make_persistent_id(id);
+    let painter = ui.painter_at(rect.expand(2.0));
+    crate::lcd::glass(&painter, rect);
+    let ink = if !enabled { th.lcd_ink.gamma_multiply(0.25) } else if response.hovered() { th.lcd_ink } else { th.lcd_ink.gamma_multiply(0.9) };
+    painter.text(rect.left_center() + Vec2::new(7.0, 0.0), egui::Align2::LEFT_CENTER, name(*value).to_uppercase(), egui::FontId::monospace(11.0), ink);
+    if enabled {
+        // A small down-pointing triangle.
+        let c = rect.right_center() - Vec2::new(10.0, 0.0);
+        let tri = vec![c + Vec2::new(-3.5, -2.0), c + Vec2::new(3.5, -2.0), c + Vec2::new(0.0, 2.5)];
+        painter.add(egui::Shape::convex_polygon(tri, ink.gamma_multiply(0.7), egui::Stroke::NONE));
+    }
+    if response.clicked() {
+        ui.memory_mut(|m| m.toggle_popup(popup));
+    }
+    egui::popup_below_widget(ui, popup, &response, egui::PopupCloseBehavior::CloseOnClick, |ui| {
+        ui.set_min_width(width);
+        for &option in options {
+            if ui.selectable_label(*value == option, name(option)).clicked() {
+                *value = option;
+            }
+        }
+    });
+}
+
+/// Bipolar amount, -1..1, as a segmented bar: drag sideways (Shift for fine),
+/// mouse wheel, double-click for zero.
+fn amount_bar(ui: &mut egui::Ui, enabled: bool, amount: &mut f32) {
+    let th = theme::t();
+    let sense = if enabled { egui::Sense::click_and_drag() } else { egui::Sense::hover() };
+    let (rect, response) = ui.allocate_exact_size(Vec2::new(MATRIX[4], 22.0), sense);
+    if response.dragged() {
+        let fine = ui.input(|i| i.modifiers.shift);
+        *amount = (*amount + response.drag_delta().x / if fine { 400.0 } else { MATRIX[4] / 2.0 }).clamp(-1.0, 1.0);
+    }
+    if response.hovered() && enabled {
+        let scroll = ui.input(|i| i.smooth_scroll_delta.y);
+        if scroll != 0.0 {
+            *amount = (*amount + scroll / 600.0).clamp(-1.0, 1.0);
+        }
+    }
+    if response.double_clicked() {
+        *amount = 0.0;
+    }
+    let painter = ui.painter_at(rect.expand(2.0));
+    crate::lcd::glass(&painter, rect);
+    let ink = if enabled { th.lcd_ink } else { th.lcd_ink.gamma_multiply(0.25) };
+    crate::lcd::bar_graph(&painter, rect.shrink2(Vec2::new(6.0, 6.5)), 0.5 + 0.5 * *amount, true, ink);
+    let (r, _) = ui.allocate_exact_size(Vec2::new(MATRIX[5], 22.0), egui::Sense::hover());
+    let active = response.hovered() || response.dragged();
+    ui.painter().text(
+        r.right_center(),
+        egui::Align2::RIGHT_CENTER,
+        format!("{:+.2}", *amount),
+        egui::FontId::monospace(11.0),
+        if !enabled { th.track } else if active { th.lcd_ink } else { th.muted },
+    );
+    if enabled {
+        response.on_hover_text(s().amount_hint);
+    }
 }
 
 fn count(v: f32) -> String {

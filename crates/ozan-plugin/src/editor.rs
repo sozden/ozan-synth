@@ -15,7 +15,7 @@ use ozan_ui::theme;
 use crate::{Meters, OzanParams};
 
 pub const WIDTH: u32 = 1560;
-pub const HEIGHT: u32 = 770;
+pub const HEIGHT: u32 = 790;
 
 /// Per-window state: needle ballistics, scope buffer, the preset bar.
 #[derive(Default)]
@@ -111,6 +111,9 @@ fn header(ui: &mut egui::Ui, params: &OzanParams, setter: &ParamSetter, window: 
                 window.seen_param = Some(i as i32);
             }
         }
+        ui.add_space(24.0);
+        let idle = ozan_ui::lcd::idle_line(&patch, None, None);
+        ozan_ui::lcd::show(ui, egui::vec2(340.0, 46.0), &ozan_ui::lcd::preset_line(&window.bar, &patch), &idle);
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             let mut index = theme::current_index();
             egui::ComboBox::from_id_salt("theme").selected_text(theme::display_name(th)).width(130.0).show_ui(ui, |ui| {
