@@ -12,7 +12,7 @@ use crate::audio::{self, AudioOutput};
 use ozan_ui::i18n::{self, fill, s, Lang};
 use ozan_ui::panel::Meters;
 use crate::midi_in::{self, MidiConnection};
-use crate::presets::{self, Preset};
+use ozan_ui::preset_bar::PresetBar;
 use ozan_ui::settings::Settings;
 use crate::shared::{Events, Status};
 use ozan_ui::{theme, widgets};
@@ -49,13 +49,7 @@ pub struct OzanApp {
     scope: Vec<f32>,
     /// Wavetables shared with the engine, here for drawing.
     bank: Arc<WavetableBank>,
-    presets: Vec<Preset>,
-    /// Preset the patch came from (it may have been changed since).
-    current: Option<usize>,
-    /// Name being typed while the save window is open.
-    save_name: Option<String>,
-    confirm_delete: bool,
-    preset_note: Option<String>,
+    bar: PresetBar,
 
     /// Octave of the computer keyboard's A key (4 → C4).
     pc_octave: i32,
@@ -97,15 +91,12 @@ impl OzanApp {
             meter: 0.0,
             vu: 0.0,
             settings,
-            presets: Vec::new(),
-            current: None,
-            save_name: None,
-            confirm_delete: false,
-            preset_note: None,
+            bar: PresetBar::default(),
         };
         let last = app.settings.get("preset").map(str::to_string);
-        app.reload_presets(last.as_deref());
-        app.select_preset(app.current.unwrap_or(0));
+        app.bar = PresetBar::new(last.as_deref());
+        let first = app.bar.current().unwrap_or(0);
+        app.select_preset(first);
         app.scan_midi(true);
         app
     }
@@ -188,155 +179,17 @@ impl OzanApp {
         }
     }
 
-    fn reload_presets(&mut self, select: Option<&str>) {
-        let (list, problems) = presets::load_all();
-        self.presets = list;
-        self.preset_note = problems.first().map(|p| fill(s().unreadable_preset, &[p]));
-        self.current = select.and_then(|name| self.presets.iter().position(|p| p.name == name));
-    }
-
     fn select_preset(&mut self, index: usize) {
-        let Some(preset) = self.presets.get(index) else { return };
-        self.patch = preset.patch;
-        self.current = Some(index);
-        let name = preset.name.clone();
+        if self.bar.load(index, &mut self.patch) {
+            self.preset_loaded(index);
+        }
+    }
+
+    /// After the bar loaded a preset into the patch.
+    fn preset_loaded(&mut self, index: usize) {
         self.events.send(Event::Patch(self.patch));
-        self.settings.set("preset", &name);
-    }
-
-    fn step_preset(&mut self, step: isize) {
-        let n = self.presets.len() as isize;
-        if n > 0 {
-            let i = self.current.map_or(0, |c| (c as isize + step).rem_euclid(n));
-            self.select_preset(i as usize);
-        }
-    }
-
-    /// The patch differs from the preset it was loaded from.
-    fn modified(&self) -> bool {
-        self.current.is_none_or(|i| self.presets[i].patch != self.patch)
-    }
-
-    fn preset_bar(&mut self, ui: &mut egui::Ui) {
-        let th = theme::t();
-        if ui.button("◀").on_hover_text(s().prev_preset).clicked() {
-            self.step_preset(-1);
-        }
-        let shown = match self.current {
-            Some(i) => format!("{:02}  {}{}", i + 1, self.presets[i].name, if self.modified() { " *" } else { "" }),
-            None => s().unsaved.to_string(),
-        };
-        let mut chosen = None;
-        egui::ComboBox::from_id_salt("preset")
-            .selected_text(RichText::new(shown).monospace().color(th.accent))
-            .width(230.0)
-            .height(480.0)
-            .show_ui(ui, |ui| {
-                let factory = self.presets.iter().filter(|p| p.file.is_none()).count();
-                for (i, preset) in self.presets.iter().enumerate() {
-                    if i == factory {
-                        ui.separator();
-                        ui.label(RichText::new(s().your_presets).size(11.0).color(th.muted));
-                    }
-                    if ui.selectable_label(self.current == Some(i), format!("{:02}  {}", i + 1, preset.name)).clicked() {
-                        chosen = Some(i);
-                    }
-                }
-            });
-        if let Some(i) = chosen {
-            self.select_preset(i);
-        }
-        if ui.button("▶").on_hover_text(s().next_preset).clicked() {
-            self.step_preset(1);
-        }
-        if ui.button(s().save).on_hover_text(s().save_hint).clicked() {
-            let name = self.current.map(|i| self.presets[i].name.clone()).filter(|_| self.current.is_some_and(|i| self.presets[i].file.is_some()));
-            self.save_name = Some(name.unwrap_or_default());
-        }
-        let deletable = self.current.is_some_and(|i| self.presets[i].file.is_some());
-        if ui.add_enabled(deletable, egui::Button::new(s().delete)).on_disabled_hover_text(s().factory_locked).clicked() {
-            self.confirm_delete = true;
-        }
-        if let Some(note) = &self.preset_note {
-            ui.label(RichText::new(note).size(11.0).color(th.warm));
-        }
-    }
-
-    /// Save and delete windows.
-    fn preset_dialogs(&mut self, ctx: &egui::Context) {
-        if let Some(mut name) = self.save_name.take() {
-            let mut close = false;
-            let mut save = false;
-            let modal = egui::Modal::new(egui::Id::new("save_preset")).show(ctx, |ui| {
-                ui.set_width(320.0);
-                ui.heading(s().save_title);
-                ui.add_space(6.0);
-                let field = ui.add(egui::TextEdit::singleline(&mut name).hint_text(s().preset_name).desired_width(f32::INFINITY));
-                field.request_focus();
-                let trimmed = name.trim();
-                if presets::path_for(trimmed).is_some_and(|p| p.exists()) && !trimmed.is_empty() {
-                    ui.label(RichText::new(s().will_overwrite).size(11.0).color(theme::t().warm));
-                }
-                ui.add_space(6.0);
-                ui.horizontal(|ui| {
-                    let ok = !trimmed.is_empty();
-                    if ui.add_enabled(ok, egui::Button::new(s().save)).clicked() || (ok && ui.input(|i| i.key_pressed(Key::Enter))) {
-                        save = true;
-                    }
-                    if ui.button(s().cancel).clicked() {
-                        close = true;
-                    }
-                });
-            });
-            if save {
-                let name = name.trim().to_string();
-                match presets::save(&name, &self.patch) {
-                    Ok(_) => {
-                        self.reload_presets(Some(&name));
-                        self.settings.set("preset", &name);
-                    }
-                    Err(e) => self.preset_note = Some(fill(s().save_failed, &[&e])),
-                }
-            } else if !close && !modal.should_close() {
-                self.save_name = Some(name);
-            }
-        }
-        if self.confirm_delete {
-            let Some(i) = self.current.filter(|&i| self.presets[i].file.is_some()) else {
-                self.confirm_delete = false;
-                return;
-            };
-            let name = self.presets[i].name.clone();
-            let mut answer = None;
-            let modal = egui::Modal::new(egui::Id::new("delete_preset")).show(ctx, |ui| {
-                ui.set_width(320.0);
-                ui.heading(s().delete_title);
-                ui.add_space(6.0);
-                ui.label(fill(s().delete_body, &[&name]));
-                ui.add_space(6.0);
-                ui.horizontal(|ui| {
-                    if ui.button(s().delete).clicked() {
-                        answer = Some(true);
-                    }
-                    if ui.button(s().cancel).clicked() {
-                        answer = Some(false);
-                    }
-                });
-            });
-            if answer == Some(true) {
-                if let Some(file) = self.presets[i].file.clone() {
-                    match presets::delete(&file) {
-                        Ok(()) => {
-                            // The sound stays as it is; it just has no preset now.
-                            self.reload_presets(None);
-                        }
-                        Err(e) => self.preset_note = Some(fill(s().delete_failed, &[&e])),
-                    }
-                }
-            }
-            if answer.is_some() || modal.should_close() {
-                self.confirm_delete = false;
-            }
+        if let Some(name) = self.bar.name(index).map(str::to_string) {
+            self.settings.set("preset", &name);
         }
     }
 
@@ -346,7 +199,9 @@ impl OzanApp {
             ozan_ui::logo::lockup(ui, 22.0, th.text, th.accent, th.muted).on_hover_text("OZAN Synth — open-source synthesizer");
             ui.label(RichText::new(format!("v{}", env!("CARGO_PKG_VERSION"))).color(th.muted));
             ui.add_space(16.0);
-            self.preset_bar(ui);
+            if let Some(i) = self.bar.bar(ui, &mut self.patch) {
+                self.preset_loaded(i);
+            }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| match &self.audio {
                 Ok(a) => {
                     ui.label(RichText::new(format!("{} · {:.1} kHz", a.name, a.sample_rate as f32 / 1000.0)).color(theme::t().muted));
@@ -463,11 +318,13 @@ impl eframe::App for OzanApp {
         // VU ballistics: the needle needs about 300 ms to settle (per 16 ms frame).
         self.vu += (peak - self.vu) * 0.12;
         if let Some(program) = self.status.take_program() {
-            if !self.presets.is_empty() {
-                self.select_preset(program as usize % self.presets.len());
+            if !self.bar.is_empty() {
+                self.select_preset(program as usize % self.bar.len());
             }
         }
-        self.preset_dialogs(&ctx);
+        if let Some(name) = self.bar.dialogs(&ctx, &self.patch) {
+            self.settings.set("preset", &name);
+        }
 
         ozan_ui::wood_cheeks(&ctx);
         egui::TopBottomPanel::top("header").frame(ozan_ui::pad()).show(&ctx, |ui| self.header(ui));

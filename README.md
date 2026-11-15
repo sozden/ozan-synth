@@ -56,7 +56,8 @@ small test host (`ozan-lab plugin`) to check that it plays. Copy the `.vst3` fol
 `C:\Program Files\Common Files\CLAP`.
 
 The plugin opens the same panel as the standalone program (theme and language follow
-the program's settings); the edited sound is saved with the DAW project. For automation
+the program's settings); the edited sound is saved with the DAW project. Presets you
+save in the program appear in the plugin and the other way round (same folder). For automation
 the host also sees a **Preset** selector and relative controls that leave the sound alone
 at their defaults: volume, cutoff, resonance, filter envelope amount, attack and release,
 LFO rate, wavetable position, unison detune, glide, and chorus/delay/reverb mix.
@@ -112,7 +113,8 @@ delay (ping-pong) ve reverb efektleri. Wavetable osilatör (5 tablo), 7 kopyaya 
 ve 6 slotlu mod matrisi. Poly/mono/legato, glide, velocity hassasiyeti, gürültü, arpejiyatör (DAW temposunu izler), ikinci LFO ve mod zarfı; çıkışın canlı dalga biçimi ve spektrumu. 23 fabrika
 preset'i; kendi preset'lerini kaydedip silebilir, MIDI program change ile seçebilirsin.
 USB MIDI otomatik bağlanır; Stüdyo (70'ler) ve Gece temaları arasında seçim yapılır.
-Ayrıca CLAP/VST3 eklentisi olarak DAW içinde çalışır (`scripts\bundle.ps1`).
+Ayrıca CLAP/VST3 eklentisi olarak DAW içinde çalışır; kendi preset'lerin uygulama ile
+eklenti arasında ortaktır (`scripts\bundle.ps1`).
 
 **Çalıştırma:** `cargo run --release -p ozan`. Arayüz varsayılan olarak İngilizce;
 başlıktaki **Language** menüsünden Türkçe seçilebilir.

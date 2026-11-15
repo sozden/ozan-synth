@@ -5,7 +5,6 @@
 mod app;
 mod audio;
 mod midi_in;
-mod presets;
 mod shared;
 
 use eframe::egui;

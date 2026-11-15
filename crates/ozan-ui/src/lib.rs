@@ -5,6 +5,8 @@ pub mod i18n;
 pub mod knob;
 pub mod logo;
 pub mod panel;
+pub mod preset_bar;
+pub mod presets;
 pub mod scope;
 pub mod settings;
 pub mod theme;

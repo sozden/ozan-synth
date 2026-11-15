@@ -221,8 +221,7 @@ impl Plugin for OzanPlugin {
     }
 
     fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Box<dyn Editor>> {
-        let names = self.presets.iter().map(|(n, _)| *n).collect();
-        editor::create(self.params.clone(), self.meters.clone(), self.bank.clone(), names)
+        editor::create(self.params.clone(), self.meters.clone(), self.bank.clone())
     }
 
     fn initialize(&mut self, _layout: &AudioIOLayout, buffer_config: &BufferConfig, _context: &mut impl InitContext<Self>) -> bool {

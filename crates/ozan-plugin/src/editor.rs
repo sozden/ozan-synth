@@ -8,6 +8,7 @@ use nih_plug_egui::create_egui_editor;
 use nih_plug_egui::egui::{self, RichText};
 use ozan_core::wavetable::WavetableBank;
 use ozan_ui::i18n::{self, s, Lang};
+use ozan_ui::preset_bar::PresetBar;
 use ozan_ui::settings::Settings;
 use ozan_ui::theme;
 
@@ -16,20 +17,25 @@ use crate::{Meters, OzanParams};
 pub const WIDTH: u32 = 1460;
 pub const HEIGHT: u32 = 950;
 
-/// Per-window state: needle ballistics.
+/// Per-window state: needle ballistics, scope buffer, the preset bar.
 #[derive(Default)]
 struct Window {
+    bar: PresetBar,
+    /// Preset parameter value the bar last followed.
+    seen_param: Option<i32>,
     vu: f32,
     peak: f32,
     scope: Vec<f32>,
 }
 
-pub fn create(params: Arc<OzanParams>, meters: Arc<Meters>, bank: Arc<WavetableBank>, names: Vec<&'static str>) -> Option<Box<dyn Editor>> {
-    let factory = ozan_core::presets::factory();
+pub fn create(params: Arc<OzanParams>, meters: Arc<Meters>, bank: Arc<WavetableBank>) -> Option<Box<dyn Editor>> {
     create_egui_editor(
         params.editor_state.clone(),
         Window::default(),
-        |ctx, _| {
+        |ctx, window| {
+            // The user's presets as they are on disk now.
+            *window = Window::default();
+            window.bar = PresetBar::new(None);
             // Theme and language as chosen in the standalone program.
             let settings = Settings::load();
             i18n::select(settings.get("lang").and_then(Lang::from_code).unwrap_or(Lang::En));
@@ -41,7 +47,10 @@ pub fn create(params: Arc<OzanParams>, meters: Arc<Meters>, bank: Arc<WavetableB
             window.vu += (peak - window.vu) * 0.12;
 
             ozan_ui::wood_cheeks(ctx);
-            egui::TopBottomPanel::top("header").frame(ozan_ui::pad()).show(ctx, |ui| header(ui, &params, setter, &names, &factory));
+            egui::TopBottomPanel::top("header").frame(ozan_ui::pad()).show(ctx, |ui| header(ui, &params, setter, window));
+            if let Ok(patch) = params.patch.read().map(|p| *p) {
+                window.bar.dialogs(ctx, &patch);
+            }
             egui::CentralPanel::default().frame(ozan_ui::pad()).show(ctx, |ui| {
                 egui::ScrollArea::vertical().auto_shrink(false).show(ui, |ui| {
                     let Ok(current) = params.patch.read().map(|p| *p) else { return };
@@ -77,36 +86,30 @@ fn set_preset(params: &OzanParams, setter: &ParamSetter, index: i32) {
     setter.end_set_parameter(&params.preset);
 }
 
-fn header(ui: &mut egui::Ui, params: &OzanParams, setter: &ParamSetter, names: &[&'static str], factory: &[(&'static str, ozan_core::Patch)]) {
+fn header(ui: &mut egui::Ui, params: &OzanParams, setter: &ParamSetter, window: &mut Window) {
     let th = theme::t();
     ui.horizontal(|ui| {
         ozan_ui::logo::lockup(ui, 22.0, th.text, th.accent, th.muted);
         ui.label(RichText::new(format!("v{}", env!("CARGO_PKG_VERSION"))).color(th.muted));
         ui.add_space(16.0);
-        let count = names.len() as i32;
-        let current = params.preset.value().clamp(0, count - 1);
-        if ui.button("◀").on_hover_text(s().prev_preset).clicked() {
-            set_preset(params, setter, (current - 1).rem_euclid(count));
+        // The host (automation, project load) may change the preset parameter.
+        let param = params.preset.value();
+        if window.seen_param != Some(param) {
+            window.seen_param = Some(param);
+            if window.bar.current().is_none_or(|c| c < window.bar.factory_count()) {
+                window.bar.set_current(Some(param as usize));
+            }
         }
-        let edited = params.patch.read().map(|p| *p != factory[current as usize].1).unwrap_or(false);
-        let shown = format!("{:02}  {}{}", current + 1, names[current as usize], if edited { " *" } else { "" });
-        let mut chosen = None;
-        egui::ComboBox::from_id_salt("preset")
-            .selected_text(RichText::new(shown).monospace().color(th.accent))
-            .width(230.0)
-            .height(520.0)
-            .show_ui(ui, |ui| {
-                for (i, name) in names.iter().enumerate() {
-                    if ui.selectable_label(i as i32 == current, format!("{:02}  {name}", i + 1)).clicked() {
-                        chosen = Some(i as i32);
-                    }
-                }
-            });
-        if let Some(i) = chosen {
-            set_preset(params, setter, i);
-        }
-        if ui.button("▶").on_hover_text(s().next_preset).clicked() {
-            set_preset(params, setter, (current + 1).rem_euclid(count));
+        let Ok(mut patch) = params.patch.read().map(|p| *p) else { return };
+        if let Some(i) = window.bar.bar(ui, &mut patch) {
+            if let Ok(mut p) = params.patch.write() {
+                *p = patch;
+            }
+            // Factory presets go through the parameter, so the host sees the change.
+            if i < window.bar.factory_count() {
+                set_preset(params, setter, i as i32);
+                window.seen_param = Some(i as i32);
+            }
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             let mut index = theme::current_index();
