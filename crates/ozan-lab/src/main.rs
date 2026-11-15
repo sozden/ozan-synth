@@ -217,7 +217,11 @@ fn main() {
             println!("{name}: sharpness per ms, worst/median = {:.2}  (99th percentile/median = {:.2})", worst / median, quantile(&per_ms, 0.99) / median);
             Ok(())
         }
-        Some("plugin") => clap_check::check(&PathBuf::from(args.get(2).map_or("OZAN Synth.clap", |s| s))),
+        Some("plugin") => clap_check::check(&PathBuf::from(args.get(2).map_or("OZAN Synth.clap", |s| s)), None),
+        Some("plugin-gui") => {
+            let secs = args.get(3).and_then(|s| s.parse().ok()).unwrap_or(8.0);
+            clap_check::check(&PathBuf::from(args.get(2).map_or("OZAN Synth.clap", |s| s)), Some(secs))
+        }
         Some("analyze") => {
             let path = PathBuf::from(args.get(2).map_or("loopback.wav", |s| s));
             read_wav(&path).map(|(x, rate)| report(&x, rate)).map_err(|e| e.to_string())
@@ -226,7 +230,7 @@ fn main() {
             let secs = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(5.0);
             loopback(secs, PathBuf::from(args.get(3).map_or("loopback.wav", |s| s)))
         }
-        _ => Err("usage: ozan-lab render <folder> | loopback <seconds> <file.wav> | analyze <file.wav> | steps <preset number> | plugin <file.clap>".into()),
+        _ => Err("usage: ozan-lab render <folder> | loopback <seconds> <file.wav> | analyze <file.wav> | steps <preset number> | plugin <file.clap> | plugin-gui <file.clap> [seconds]".into()),
     };
     if let Err(e) = result {
         eprintln!("{e}");

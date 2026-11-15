@@ -53,11 +53,12 @@ small test host (`ozan-lab plugin`) to check that it plays. Copy the `.vst3` fol
 `C:\Program Files\Common Files\VST3` (or point your DAW at `dist`), the `.clap` file to
 `C:\Program Files\Common Files\CLAP`.
 
-The host sees a **Preset** selector (all factory presets) and relative controls that
-leave the preset alone at their defaults: volume, cutoff, resonance, filter envelope
-amount, attack and release, LFO rate, wavetable position, unison detune, glide, and
-chorus/delay/reverb mix. The plugin has no editor window of its own yet; the host shows
-its generic sliders. Built with [nih-plug](https://github.com/robbert-vdh/nih-plug) (ISC),
+The plugin opens the same panel as the standalone program (theme and language follow
+the program's settings); the edited sound is saved with the DAW project. For automation
+the host also sees a **Preset** selector and relative controls that leave the sound alone
+at their defaults: volume, cutoff, resonance, filter envelope amount, attack and release,
+LFO rate, wavetable position, unison detune, glide, and chorus/delay/reverb mix.
+`ozan-lab plugin-gui <file.clap>` opens the plugin's window in a small test host. Built with [nih-plug](https://github.com/robbert-vdh/nih-plug) (ISC),
 pinned to a reviewed commit.
 
 ## Layout
@@ -67,7 +68,8 @@ pinned to a reviewed commit.
 | `crates/ozan-core` | Sound engine: oscillators, filter, envelopes, LFO, voices, MIDI parsing, factory presets. No required dependencies (`serde` optional), no allocation while rendering — meant to run later inside a plugin too. |
 | `crates/ozan` | Standalone program: sound card (`cpal`), MIDI (`midir`), panel (`egui`). |
 
-| `crates/ozan-plugin` | CLAP and VST3 instrument through nih-plug: preset selector and relative macro parameters. |
+| `crates/ozan-ui` | Interface shared by the program and the plugin (egui 0.31): theme, knobs, meters, logo, translations, settings, the sound panel. |
+| `crates/ozan-plugin` | CLAP and VST3 instrument through nih-plug and nih_plug_egui: the panel in the plugin window, preset selector and relative macro parameters. |
 | `crates/ozan-lab` | Listening lab (not shipped): renders every preset to WAV with spectrograms and measurements, records the real output via WASAPI loopback. |
 
 Events from MIDI and the panel reach the audio thread through a lock-free queue (`rtrb`).
@@ -91,7 +93,7 @@ offset, the level after all notes end, and a click score at every note start/end
 3. ~~Modulation: LFO, mod wheel, presets (save/load)~~ → done, with aftertouch and program change
 4. ~~Effects: chorus, delay, reverb~~ → done
 5. ~~Wavetable oscillator, unison, modulation matrix~~ → done
-6. ~~VST3/CLAP plugin with `nih-plug`~~ → first version done (generic host sliders); own editor window next
+6. ~~VST3/CLAP plugin with `nih-plug`~~ → done, with the full panel as the plugin window
 
 ---
 

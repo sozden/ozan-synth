@@ -3,7 +3,7 @@
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use eframe::egui::{self, Color32, Pos2, Rect, Stroke, Vec2};
+use egui::{self, Color32, Pos2, Rect, Stroke, Vec2};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum KnobStyle {

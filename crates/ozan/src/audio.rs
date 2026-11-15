@@ -19,7 +19,7 @@ pub struct AudioOutput {
 
 pub fn open(events: rtrb::Consumer<Event>, status: Arc<Status>, bank: Arc<WavetableBank>) -> Result<AudioOutput, String> {
     let host = cpal::default_host();
-    let device = host.default_output_device().ok_or(crate::i18n::s().no_audio_device)?;
+    let device = host.default_output_device().ok_or(ozan_ui::i18n::s().no_audio_device)?;
     let name = device.description().map(|d| d.name().to_string()).unwrap_or_else(|_| device.to_string());
     let supported = device.default_output_config().map_err(|e| e.to_string())?;
     let config = supported.config();
@@ -28,7 +28,7 @@ pub fn open(events: rtrb::Consumer<Event>, status: Arc<Status>, bank: Arc<Waveta
         SampleFormat::I16 => build::<i16>(&device, config, events, status, bank),
         SampleFormat::U16 => build::<u16>(&device, config, events, status, bank),
         SampleFormat::I32 => build::<i32>(&device, config, events, status, bank),
-        other => return Err(crate::i18n::fill(crate::i18n::s().sample_format, &[&format!("{other:?}")])),
+        other => return Err(ozan_ui::i18n::fill(ozan_ui::i18n::s().sample_format, &[&format!("{other:?}")])),
     }?;
     stream.play().map_err(|e| e.to_string())?;
     Ok(AudioOutput { _stream: stream, sample_rate: config.sample_rate, name })

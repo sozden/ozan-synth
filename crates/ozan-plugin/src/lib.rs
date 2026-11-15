@@ -1,29 +1,75 @@
 //! OZAN Synth as a CLAP and VST3 instrument (through nih-plug).
 //!
-//! The DAW sees a preset selector and a set of relative "macro" parameters (see
-//! [`macros`]); the full sound engine and every factory preset are inside.
+//! The sound is a full [`Patch`], edited in the plugin's window (the same panel as
+//! the standalone program) and saved with the DAW project. The DAW also sees a
+//! preset selector and relative "macro" parameters for automation (see [`macros`]).
 
+mod editor;
 pub mod macros;
 
 use std::num::NonZeroU32;
-use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::{Arc, RwLock};
 
 use nih_plug::prelude::*;
+use nih_plug_egui::EguiState;
+use ozan_core::wavetable::WavetableBank;
 use ozan_core::{Engine, Event, Patch};
 
 use macros::Macros;
 
+/// Values the audio thread shows in the window (f32 bits).
+#[derive(Default)]
+pub struct Meters {
+    peak: AtomicU32,
+    voices: AtomicU32,
+    lfo: AtomicU32,
+    wheel: AtomicU32,
+    aftertouch: AtomicU32,
+}
+
+impl Meters {
+    fn store(cell: &AtomicU32, v: f32) {
+        cell.store(v.to_bits(), Ordering::Relaxed);
+    }
+
+    fn load(cell: &AtomicU32) -> f32 {
+        f32::from_bits(cell.load(Ordering::Relaxed))
+    }
+
+    /// Highest peak since the window last looked.
+    pub fn take_peak(&self) -> f32 {
+        f32::from_bits(self.peak.swap(0, Ordering::Relaxed))
+    }
+}
+
 pub struct OzanPlugin {
     params: Arc<OzanParams>,
     presets: Vec<(&'static str, Patch)>,
+    /// Shared by the engine and the window (which draws the tables).
+    bank: Arc<WavetableBank>,
+    meters: Arc<Meters>,
     /// Made in `initialize`, where allocating is allowed.
     engine: Option<Engine>,
     /// Patch last sent to the engine.
     sent: Option<Patch>,
+    /// The sound when the window last held the lock; used while it holds it.
+    base: Patch,
+    /// Preset parameter value last acted on; a change loads that preset.
+    preset_seen: Option<i32>,
+    wheel: f32,
+    aftertouch: f32,
 }
 
 #[derive(Params)]
 pub struct OzanParams {
+    /// Window size, saved with the project.
+    #[persist = "editor-state"]
+    pub editor_state: Arc<EguiState>,
+    /// The full sound, saved with the project.
+    #[persist = "patch"]
+    pub patch: Arc<RwLock<Patch>>,
+
     #[id = "preset"]
     pub preset: IntParam,
     #[id = "volume"]
@@ -72,9 +118,11 @@ fn mix(name: &str) -> FloatParam {
 }
 
 impl OzanParams {
-    fn new(names: Vec<&'static str>) -> Self {
+    fn new(names: Vec<&'static str>, first: Patch) -> Self {
         let count = names.len() as i32;
         Self {
+            editor_state: EguiState::from_size(editor::WIDTH, editor::HEIGHT),
+            patch: Arc::new(RwLock::new(first)),
             preset: IntParam::new("Preset", 0, IntRange::Linear { min: 0, max: count - 1 }).with_value_to_string(Arc::new(
                 move |i| names.get(i as usize).map_or_else(|| i.to_string(), |n| format!("{:02} {n}", i + 1)),
             )),
@@ -117,7 +165,19 @@ impl Default for OzanPlugin {
     fn default() -> Self {
         let presets = ozan_core::presets::factory();
         let names = presets.iter().map(|(n, _)| *n).collect();
-        Self { params: Arc::new(OzanParams::new(names)), presets, engine: None, sent: None }
+        let first = presets[0].1;
+        Self {
+            params: Arc::new(OzanParams::new(names, first)),
+            presets,
+            bank: Arc::new(WavetableBank::new()),
+            meters: Arc::new(Meters::default()),
+            engine: None,
+            sent: None,
+            base: first,
+            preset_seen: None,
+            wheel: 0.0,
+            aftertouch: 0.0,
+        }
     }
 }
 
@@ -158,10 +218,16 @@ impl Plugin for OzanPlugin {
         self.params.clone()
     }
 
+    fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Box<dyn Editor>> {
+        let names = self.presets.iter().map(|(n, _)| *n).collect();
+        editor::create(self.params.clone(), self.meters.clone(), self.bank.clone(), names)
+    }
+
     fn initialize(&mut self, _layout: &AudioIOLayout, buffer_config: &BufferConfig, _context: &mut impl InitContext<Self>) -> bool {
-        // Builds the wavetables: fine here, never in `process`.
-        self.engine = Some(Engine::new(buffer_config.sample_rate));
+        self.engine = Some(Engine::with_bank(buffer_config.sample_rate, self.bank.clone()));
         self.sent = None;
+        // The saved sound stays; only a later change of the preset parameter loads one.
+        self.preset_seen = Some(self.params.preset.value());
         true
     }
 
@@ -175,8 +241,19 @@ impl Plugin for OzanPlugin {
     fn process(&mut self, buffer: &mut Buffer, _aux: &mut AuxiliaryBuffers, context: &mut impl ProcessContext<Self>) -> ProcessStatus {
         let Some(engine) = &mut self.engine else { return ProcessStatus::Normal };
 
-        let index = (self.params.preset.value().max(0) as usize).min(self.presets.len() - 1);
-        let patch = macros::apply(&self.presets[index].1, &self.params.macros());
+        let preset = self.params.preset.value();
+        if self.preset_seen != Some(preset) {
+            // A new preset from the host or the window replaces the sound.
+            if let Ok(mut p) = self.params.patch.try_write() {
+                *p = self.presets[(preset.max(0) as usize).min(self.presets.len() - 1)].1;
+                self.preset_seen = Some(preset);
+            }
+        }
+        // The window may be editing; never wait for it here.
+        if let Ok(p) = self.params.patch.try_read() {
+            self.base = *p;
+        }
+        let patch = macros::apply(&self.base, &self.params.macros());
         if self.sent != Some(patch) {
             engine.handle(Event::Patch(patch));
             self.sent = Some(patch);
@@ -194,12 +271,24 @@ impl Plugin for OzanPlugin {
                 pos = at;
             }
             if let Some(e) = translate(&event) {
+                match e {
+                    Event::ModWheel(v) => self.wheel = v,
+                    Event::Aftertouch(v) => self.aftertouch = v,
+                    _ => {}
+                }
                 engine.handle(e);
             }
         }
         if pos < frames {
             engine.render_stereo(&mut left[pos..frames], &mut right[pos..frames]);
         }
+        let peak = left.iter().chain(right.iter()).fold(0.0f32, |m, v| m.max(v.abs()));
+        let m = &self.meters;
+        m.peak.fetch_max(peak.to_bits(), Ordering::Relaxed);
+        Meters::store(&m.voices, engine.active_voices() as f32);
+        Meters::store(&m.lfo, engine.lfo_value());
+        Meters::store(&m.wheel, self.wheel);
+        Meters::store(&m.aftertouch, self.aftertouch);
         // Reverb and echo tails ring on after the last note.
         ProcessStatus::KeepAlive
     }

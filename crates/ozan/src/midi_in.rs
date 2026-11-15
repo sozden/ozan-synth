@@ -8,7 +8,7 @@ use std::sync::Arc;
 use midir::{Ignore, MidiInput, MidiInputConnection};
 use ozan_core::Event;
 
-use crate::i18n::{fill, s};
+use ozan_ui::i18n::{fill, s};
 use crate::shared::{Events, Status};
 
 const CLIENT: &str = "OZAN Synth";

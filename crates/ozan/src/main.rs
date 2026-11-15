@@ -4,28 +4,27 @@
 
 mod app;
 mod audio;
-mod i18n;
-mod knob;
-mod logo;
 mod midi_in;
 mod presets;
-mod settings;
 mod shared;
-mod theme;
-mod widgets;
 
 use eframe::egui;
+
+/// Window and taskbar icon.
+fn icon() -> egui::IconData {
+    eframe::icon_data::from_png_bytes(include_bytes!("../assets/icon.png")).unwrap_or_default()
+}
 
 fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("OZAN Synth")
             .with_app_id("ozan")
-            .with_icon(logo::icon())
+            .with_icon(icon())
             .with_inner_size([1420.0, 960.0])
             .with_min_inner_size([1200.0, 700.0]),
         ..Default::default()
     };
-    settings::migrate_old_folder();
+    ozan_ui::settings::migrate_old_folder();
     eframe::run_native("OZAN Synth", options, Box::new(|cc| Ok(Box::new(app::OzanApp::new(cc)))))
 }

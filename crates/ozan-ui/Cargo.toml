@@ -1,0 +1,14 @@
+[package]
+name = "ozan-ui"
+description = "OZAN Synth's interface: theme, knobs, meters, logo, translations and the sound panel"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+ozan-core = { path = "../ozan-core" }
+# The plugin's window (nih_plug_egui → egui-baseview) uses egui 0.31, so the shared
+# interface, and the standalone program, use it too.
+egui = "0.31"

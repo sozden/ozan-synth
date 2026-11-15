@@ -19,7 +19,7 @@ struct PresetFile {
 }
 
 fn dir() -> Option<PathBuf> {
-    Some(crate::settings::dir()?.join("presets"))
+    Some(ozan_ui::settings::dir()?.join("presets"))
 }
 
 /// All presets, plus a note for each user file that could not be read.
@@ -61,7 +61,7 @@ pub fn path_for(name: &str) -> Option<PathBuf> {
 
 /// Saves (or overwrites) a user preset.
 pub fn save(name: &str, patch: &Patch) -> Result<PathBuf, String> {
-    let path = path_for(name).ok_or(crate::i18n::s().no_settings_dir)?;
+    let path = path_for(name).ok_or(ozan_ui::i18n::s().no_settings_dir)?;
     if let Some(d) = path.parent() {
         std::fs::create_dir_all(d).map_err(|e| e.to_string())?;
     }

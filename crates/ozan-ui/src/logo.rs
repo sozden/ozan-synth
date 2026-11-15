@@ -3,7 +3,7 @@
 //! A an open peak (Λ, an envelope's attack), N. `assets/make_logo.py` writes the SVG
 //! files from the same proportions.
 
-use eframe::egui::{self, Color32, Pos2, Sense, Shape, Stroke, Vec2};
+use egui::{self, Color32, Pos2, Sense, Shape, Stroke, Vec2};
 
 const STROKE: f32 = 14.0;
 const GAP: f32 = 26.0;
@@ -63,9 +63,4 @@ pub fn lockup(ui: &mut egui::Ui, h: f32, text: Color32, accent: Color32, muted: 
     let pos = Pos2::new(rect.min.x + word.x + h * 0.45, rect.min.y + STROKE * k / 2.0 + h - label.size().y * 0.85);
     ui.painter().galley(pos, label, muted);
     response
-}
-
-/// Window and taskbar icon (`assets/icon.png`).
-pub fn icon() -> egui::IconData {
-    eframe::icon_data::from_png_bytes(include_bytes!("../assets/icon.png")).unwrap_or_default()
 }

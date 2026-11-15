@@ -1,7 +1,7 @@
 //! Synth-style controls drawn with egui: envelope graph, level meter and an
 //! on-screen piano keyboard.
 
-use eframe::egui::{self, Color32, Pos2, Rect, Sense, Stroke, StrokeKind, Vec2};
+use egui::{self, Color32, Pos2, Rect, Sense, Stroke, StrokeKind, Vec2};
 
 use crate::theme;
 

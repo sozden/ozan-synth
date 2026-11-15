@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/ozan-core", "crates/ozan", "crates/ozan-lab", "crates/ozan-plugin"]
+members = ["crates/ozan-core", "crates/ozan-ui", "crates/ozan", "crates/ozan-lab", "crates/ozan-plugin"]
 
 [workspace.package]
 version = "0.6.0"

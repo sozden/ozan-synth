@@ -15,3 +15,7 @@ rustfft = "6"
 libloading = "0.9"
 # Same pinned commit nih-plug uses (see crates/ozan-plugin).
 clap-sys = { git = "https://github.com/micahrj/clap-sys.git", rev = "25d7f53fdb6363ad63fbd80049cb7a42a97ac156" }
+
+[target.'cfg(windows)'.dependencies]
+# The test host's window, for checking the plugin's editor.
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_System_LibraryLoader", "Win32_Graphics_Gdi"] }

@@ -2,7 +2,7 @@
 
 use std::f32::consts::PI;
 
-use eframe::egui::{self, Color32, Pos2, Rect, Sense, Stroke, Vec2};
+use egui::{self, Color32, Pos2, Rect, Sense, Stroke, Vec2};
 use ozan_core::{FilterMode, LfoWave, VoiceMode, Waveform};
 
 use crate::i18n::s;
