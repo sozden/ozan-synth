@@ -21,6 +21,7 @@ pub const HEIGHT: u32 = 950;
 struct Window {
     vu: f32,
     peak: f32,
+    scope: Vec<f32>,
 }
 
 pub fn create(params: Arc<OzanParams>, meters: Arc<Meters>, bank: Arc<WavetableBank>, names: Vec<&'static str>) -> Option<Box<dyn Editor>> {
@@ -45,7 +46,10 @@ pub fn create(params: Arc<OzanParams>, meters: Arc<Meters>, bank: Arc<WavetableB
                 egui::ScrollArea::vertical().auto_shrink(false).show(ui, |ui| {
                     let Ok(current) = params.patch.read().map(|p| *p) else { return };
                     let mut patch = current;
+                    meters.scope.snapshot(&mut window.scope);
                     let shown = ozan_ui::panel::Meters {
+                        scope: &window.scope,
+                        sample_rate: meters.scope.sample_rate(),
                         vu: window.vu,
                         peak: window.peak,
                         voices: Meters::load(&meters.voices) as u32,

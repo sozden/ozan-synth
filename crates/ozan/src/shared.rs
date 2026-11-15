@@ -40,6 +40,8 @@ pub struct Status {
     lfo2: AtomicU32,
     /// Program change waiting for the interface, plus one (0 = none).
     program: AtomicU32,
+    /// Output samples for the scope.
+    pub scope: ozan_ui::scope::ScopeTap,
 }
 
 impl Status {

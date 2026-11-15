@@ -12,7 +12,7 @@ use crate::widgets;
 
 /// What the panel shows but does not edit, read from the audio side.
 #[derive(Clone, Copy, Debug, Default)]
-pub struct Meters {
+pub struct Meters<'a> {
     /// VU needle level and recent peak (linear).
     pub vu: f32,
     pub peak: f32,
@@ -22,6 +22,9 @@ pub struct Meters {
     pub lfo2: f32,
     pub wheel: f32,
     pub aftertouch: f32,
+    /// Latest output samples, oldest first, for the scope.
+    pub scope: &'a [f32],
+    pub sample_rate: f32,
 }
 
 /// Every section of the panel. Edits `p` in place; the caller compares it with a
@@ -133,6 +136,7 @@ pub fn panel(ui: &mut egui::Ui, p: &mut Patch, bank: &WavetableBank, m: &Meters)
             });
         });
         theme::section(ui, s().mod_env, |ui| envelope(ui, &mut p.mod_env));
+        theme::section(ui, s().scope, |ui| crate::scope::section(ui, m.scope, m.sample_rate, Vec2::new(420.0, 96.0)));
     });
     ui.horizontal_top(|ui| {
         let fx = &mut p.fx;

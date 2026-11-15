@@ -27,6 +27,7 @@ pub struct Meters {
     lfo2: AtomicU32,
     wheel: AtomicU32,
     aftertouch: AtomicU32,
+    pub scope: ozan_ui::scope::ScopeTap,
 }
 
 impl Meters {
@@ -226,6 +227,7 @@ impl Plugin for OzanPlugin {
 
     fn initialize(&mut self, _layout: &AudioIOLayout, buffer_config: &BufferConfig, _context: &mut impl InitContext<Self>) -> bool {
         self.engine = Some(Engine::with_bank(buffer_config.sample_rate, self.bank.clone()));
+        self.meters.scope.set_sample_rate(buffer_config.sample_rate);
         self.sent = None;
         // The saved sound stays; only a later change of the preset parameter loads one.
         self.preset_seen = Some(self.params.preset.value());
@@ -288,6 +290,9 @@ impl Plugin for OzanPlugin {
             engine.render_stereo(&mut left[pos..frames], &mut right[pos..frames]);
         }
         let peak = left.iter().chain(right.iter()).fold(0.0f32, |m, v| m.max(v.abs()));
+        for (l, r) in left.iter().zip(right.iter()) {
+            self.meters.scope.push(0.5 * (l + r));
+        }
         let m = &self.meters;
         m.peak.fetch_max(peak.to_bits(), Ordering::Relaxed);
         Meters::store(&m.voices, engine.active_voices() as f32);

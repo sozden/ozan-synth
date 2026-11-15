@@ -45,6 +45,8 @@ pub struct OzanApp {
     midi_glow: f32,
 
     patch: Patch,
+    /// Scope samples, refilled each frame.
+    scope: Vec<f32>,
     /// Wavetables shared with the engine, here for drawing.
     bank: Arc<WavetableBank>,
     presets: Vec<Preset>,
@@ -87,6 +89,7 @@ impl OzanApp {
             seen_messages: 0,
             midi_glow: 0.0,
             patch: Patch::default(),
+            scope: Vec::with_capacity(ozan_ui::scope::LEN),
             bank,
             pc_octave: 4,
             pc_held: HashMap::new(),
@@ -472,7 +475,10 @@ impl eframe::App for OzanApp {
         egui::CentralPanel::default().frame(ozan_ui::pad()).show(&ctx, |ui| {
             egui::ScrollArea::vertical().auto_shrink(false).show(ui, |ui| {
                 let before = self.patch;
+                self.status.scope.snapshot(&mut self.scope);
                 let meters = Meters {
+                    scope: &self.scope,
+                    sample_rate: self.status.scope.sample_rate(),
                     vu: self.vu,
                     peak: self.meter,
                     voices: self.status.voices(),

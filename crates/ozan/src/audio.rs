@@ -43,6 +43,7 @@ fn build<T: SizedSample + FromSample<f32>>(
 ) -> Result<cpal::Stream, String> {
     let channels = config.channels.max(1) as usize;
     let mut engine = Engine::with_bank(config.sample_rate as f32, bank);
+    status.scope.set_sample_rate(config.sample_rate as f32);
     // Grown on the first callback only, then reused.
     let mut left: Vec<f32> = Vec::with_capacity(8192);
     let mut right: Vec<f32> = Vec::with_capacity(8192);
@@ -64,6 +65,7 @@ fn build<T: SizedSample + FromSample<f32>>(
                 for (i, frame) in data.chunks_exact_mut(channels).enumerate() {
                     let (a, b) = (l[i].clamp(-1.0, 1.0), r[i].clamp(-1.0, 1.0));
                     peak = peak.max(a.abs()).max(b.abs());
+                    status.scope.push(0.5 * (a + b));
                     match frame {
                         [mono] => *mono = T::from_sample(0.5 * (a + b)),
                         [fl, fr, rest @ ..] => {

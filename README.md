@@ -30,7 +30,7 @@ The logo is drawn from geometry in `assets/make_logo.py`: the Z is a saw tooth, 
 - Presets: 23 factory sounds, save/delete your own (JSON in `%APPDATA%\Ozan\presets`), step with ◀ ▶ or MIDI program change
 - USB MIDI input (all channels): notes, velocity, sustain pedal, pitch bend, mod wheel, aftertouch, program change, all-notes-off
 - MIDI keyboards are found and connected automatically
-- Panel with knobs (drag up/down, Shift for fine, double-click for default, mouse wheel), envelope graphs, analogue VU meter
+- Panel with knobs (drag up/down, Shift for fine, double-click for default, mouse wheel), envelope graphs, analogue VU meter, and a live scope: triggered waveform or log-frequency spectrum of the output
 - English or Turkish interface, and two looks, chosen in the header and remembered: **Studio** (1970s style — wooden end cheeks, skirted knobs, cream lettering) and **Night** (dark cards with screws)
 - On-screen keyboard (C2–C7) that also shows the notes coming from MIDI
 - Computer keyboard: `A W S E D F T G Y H U J K O L`, `Z`/`X` change octave
@@ -109,7 +109,7 @@ USB MIDI klavye, bilgisayar klavyesi ya da fareyle çalınır.
 kare ve üçgen dalgalar; rezonanslı filtre (LP12, LP24, BP, HP), filtre ve amfi için ayrı
 ADSR zarfları. LFO (vibrato, filtre, tremolo), mod tekeri ve aftertouch. Stereo chorus,
 delay (ping-pong) ve reverb efektleri. Wavetable osilatör (5 tablo), 7 kopyaya kadar unison
-ve 6 slotlu mod matrisi. Poly/mono/legato, glide, velocity hassasiyeti, gürültü, arpejiyatör (DAW temposunu izler), ikinci LFO ve mod zarfı. 23 fabrika
+ve 6 slotlu mod matrisi. Poly/mono/legato, glide, velocity hassasiyeti, gürültü, arpejiyatör (DAW temposunu izler), ikinci LFO ve mod zarfı; çıkışın canlı dalga biçimi ve spektrumu. 23 fabrika
 preset'i; kendi preset'lerini kaydedip silebilir, MIDI program change ile seçebilirsin.
 USB MIDI otomatik bağlanır; Stüdyo (70'ler) ve Gece temaları arasında seçim yapılır.
 Ayrıca CLAP/VST3 eklentisi olarak DAW içinde çalışır (`scripts\bundle.ps1`).
