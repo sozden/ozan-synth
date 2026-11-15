@@ -3,6 +3,7 @@
 //! Nothing in here allocates or locks while rendering, so [`Engine::render_stereo`]
 //! can be called from a real-time audio callback.
 
+pub mod arp;
 pub mod effects;
 pub mod engine;
 pub mod envelope;
@@ -17,6 +18,7 @@ pub mod presets;
 pub mod voice;
 pub mod wavetable;
 
+pub use arp::{ArpDivision, ArpMode, ArpParams};
 pub use engine::{Engine, Event, MAX_VOICES};
 pub use filter::FilterMode;
 pub use lfo::LfoWave;

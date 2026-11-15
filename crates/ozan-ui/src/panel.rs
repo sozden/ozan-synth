@@ -3,7 +3,7 @@
 
 use egui::{self, RichText, Vec2};
 use ozan_core::wavetable::WavetableBank;
-use ozan_core::{AdsrParams, ModDest, ModSource, OscParams, Patch, Waveform, WavetableKind};
+use ozan_core::{AdsrParams, ArpDivision, ArpParams, ModDest, ModSource, OscParams, Patch, Waveform, WavetableKind};
 
 use crate::i18n::{self, s};
 use crate::knob::{self, Knob};
@@ -157,6 +157,7 @@ pub fn panel(ui: &mut egui::Ui, p: &mut Patch, bank: &WavetableBank, m: &Meters)
                 Knob::new(s().mix, &mut r.mix, 0.0, 1.0).default_value(0.3).format(percent).show(ui);
             });
         });
+        theme::section(ui, s().arp, |ui| arpeggiator(ui, &mut p.arp));
     });
 }
 
@@ -272,6 +273,39 @@ fn count(v: f32) -> String {
 
 fn cents_plain(v: f32) -> String {
     format!("{v:.0} ct")
+}
+
+/// Arpeggiator switches, pattern, step length, octaves, gate and tempo.
+pub fn arpeggiator(ui: &mut egui::Ui, a: &mut ArpParams) {
+    ui.horizontal(|ui| {
+        widgets::toggle(ui, &mut a.on, s().on);
+        ui.add_space(12.0);
+        widgets::toggle(ui, &mut a.hold, s().hold);
+    });
+    ui.horizontal(|ui| {
+        knob::arp_mode_selector(ui, &mut a.mode);
+        ui.add_space(6.0);
+        egui::ComboBox::from_id_salt("arp_division").selected_text(a.division.label()).width(58.0).show_ui(ui, |ui| {
+            for d in ArpDivision::ALL {
+                ui.selectable_value(&mut a.division, d, d.label());
+            }
+        })
+        .response
+        .on_hover_text(s().step);
+    });
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 2.0;
+        let mut octaves = a.octaves as f32;
+        if Knob::new(s().octaves, &mut octaves, 1.0, 4.0).integer().default_value(1.0).format(count).show(ui) {
+            a.octaves = octaves as u8;
+        }
+        Knob::new(s().gate, &mut a.gate, 0.05, 1.0).default_value(0.5).format(percent).show(ui);
+        Knob::new(s().tempo, &mut a.bpm, 40.0, 240.0).default_value(120.0).format(bpm).show(ui);
+    });
+}
+
+fn bpm(v: f32) -> String {
+    format!("{v:.0} BPM")
 }
 
 /// Four ADSR knobs and the shape they make.

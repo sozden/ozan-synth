@@ -4,6 +4,7 @@
 //! presets does not jump in loudness: about -25 dB RMS while the test phrase
 //! plays (short plucks a little lower, judged by their peaks).
 
+use crate::arp::{ArpDivision, ArpMode, ArpParams};
 use crate::envelope::AdsrParams;
 use crate::filter::FilterMode;
 use crate::lfo::LfoWave;
@@ -77,6 +78,10 @@ fn mods(slots: &[ModSlot]) -> [ModSlot; SLOTS] {
 
 fn play(mode: VoiceMode, glide: f32, velocity: f32) -> PlayParams {
     PlayParams { mode, glide, velocity }
+}
+
+fn arp(mode: ArpMode, division: ArpDivision, octaves: u8, gate: f32, bpm: f32) -> ArpParams {
+    ArpParams { on: true, mode, division, octaves, gate, hold: false, bpm }
 }
 
 /// Built-in presets, in the order they appear in the list.
@@ -319,6 +324,32 @@ pub fn factory() -> Vec<(&'static str, Patch)> {
                 lfo: lfo(LfoWave::Triangle, 0.2, 0.0, 0.4, 0.0),
                 fx: fx(chorus(0.3, 0.6, 0.5), None, reverb(0.9, 5.0, 0.4, 30.0, 0.5)),
                 volume: 1.0,
+                ..d
+            },
+        ),
+        (
+            "Arp Pluck",
+            Patch {
+                osc: [osc(Square, 0, 0, 0.0, 0.8), osc(Saw, 1, 0, 0.0, 0.4)],
+                filter: filter(Lp24, 300.0, 0.4, 0.65, 0.8),
+                filter_env: adsr(0.001, 0.2, 0.0, 0.2),
+                amp_env: adsr(0.001, 0.3, 0.0, 0.2),
+                arp: arp(ArpMode::Up, ArpDivision::Sixteenth, 2, 0.4, 124.0),
+                // A dotted eighth at 124 BPM.
+                fx: fx(None, delay(363.0, 0.4, 3500.0, true, 0.3), reverb(0.5, 1.5, 0.4, 5.0, 0.15)),
+                volume: 0.68,
+                ..d
+            },
+        ),
+        (
+            "Random Bells",
+            Patch {
+                osc: [osc(Sine, 0, 0, 0.0, 0.8), osc(Triangle, 2, 0, 0.0, 0.4)],
+                filter: filter(Lp12, 6000.0, 0.0, 0.0, 0.3),
+                amp_env: adsr(0.001, 0.9, 0.0, 0.9),
+                arp: arp(ArpMode::Random, ArpDivision::Eighth, 2, 0.8, 100.0),
+                fx: fx(None, delay(450.0, 0.35, 3000.0, true, 0.25), reverb(0.9, 5.0, 0.3, 30.0, 0.45)),
+                volume: 0.52,
                 ..d
             },
         ),

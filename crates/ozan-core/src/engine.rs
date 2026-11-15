@@ -1,5 +1,6 @@
 //! Polyphonic engine: voice allocation, events and mixing.
 
+use crate::arp::{Arp, ArpAction};
 use crate::effects::Effects;
 use crate::lfo::Lfo;
 use crate::patch::{Patch, MOD_OCTAVES};
@@ -39,6 +40,9 @@ pub enum Event {
     Aftertouch(f32),
     /// Cuts reverb and echo tails at once (the panel's panic button).
     ClearEffects,
+    /// The host's tempo in beats per minute, for the arpeggiator (the patch's own
+    /// tempo is used until one arrives).
+    Tempo(f32),
     /// MIDI program change; handled by the application, not the engine.
     ProgramChange(u8),
     AllNotesOff,
@@ -68,6 +72,8 @@ pub struct Engine {
     /// Keys held in mono/legato, oldest first; the newest sounds.
     stack: [u8; 16],
     stack_len: usize,
+    arp: Arp,
+    host_bpm: Option<f32>,
     /// For the matrix's random source.
     seed: u32,
     /// Read-only tables shared by all voices (and by the interface for drawing).
@@ -101,6 +107,8 @@ impl Engine {
             last_note: None,
             stack: [0; 16],
             stack_len: 0,
+            arp: Arp::default(),
+            host_bpm: None,
             seed: 0x9E37_79B9,
             bank,
         }
@@ -124,9 +132,16 @@ impl Engine {
 
     pub fn handle(&mut self, event: Event) {
         match event {
+            Event::NoteOn { note, velocity: 0 } | Event::NoteOff { note } if self.patch.arp.on => {
+                if let Some(action) = self.arp.key_up(note, &self.patch.arp) {
+                    self.arp_act(action);
+                }
+            }
+            Event::NoteOn { note, velocity } if self.patch.arp.on => self.arp.key_down(note, velocity, &self.patch.arp),
             Event::NoteOn { note, velocity: 0 } => self.note_off(note),
             Event::NoteOn { note, velocity } => self.note_on(note, velocity as f32 / 127.0),
             Event::NoteOff { note } => self.note_off(note),
+            Event::Tempo(bpm) => self.host_bpm = (bpm > 0.0).then_some(bpm),
             Event::SustainPedal(down) => {
                 self.pedal = down;
                 if !down {
@@ -141,13 +156,29 @@ impl Engine {
             Event::ProgramChange(_) => {}
             Event::ClearEffects => self.effects.clear(),
             Event::AllNotesOff => {
+                self.arp.clear();
                 self.pedal = false;
                 self.stack_len = 0;
                 for v in &mut self.voices {
                     v.kill();
                 }
             }
-            Event::Patch(p) => self.patch = p,
+            Event::Patch(p) => {
+                if p.arp.on != self.patch.arp.on {
+                    // Switching the arpeggiator either way lets go of what sounds:
+                    // its keys were going to the other path.
+                    if let Some(action) = self.arp.clear() {
+                        self.arp_act(action);
+                    }
+                    for i in 0..self.voices.len() {
+                        if self.voices[i].held {
+                            self.voices[i].release(&p, self.sample_rate);
+                        }
+                    }
+                    self.stack_len = 0;
+                }
+                self.patch = p;
+            }
         }
     }
 
@@ -302,23 +333,60 @@ impl Engine {
         self.effects.clear();
     }
 
+    fn arp_act(&mut self, action: ArpAction) {
+        match action {
+            ArpAction::On { note, velocity } => self.note_on(note, velocity as f32 / 127.0),
+            ArpAction::Off { note } => self.note_off(note),
+        }
+    }
+
+    /// Length of one arpeggiator step in samples.
+    fn arp_step(&self) -> f64 {
+        let bpm = self.host_bpm.unwrap_or(self.patch.arp.bpm).clamp(20.0, 400.0) as f64;
+        self.sample_rate as f64 * 60.0 / bpm * self.patch.arp.division.beats()
+    }
+
+    /// Lets the arpeggiator act if something is due, then says how many samples
+    /// may be rendered before it must act again (at most `limit`).
+    fn arp_until_next(&mut self, limit: usize) -> usize {
+        if !self.patch.arp.on {
+            return limit;
+        }
+        let step = self.arp_step();
+        for action in self.arp.due(&self.patch.arp, step).into_iter().flatten() {
+            self.arp_act(action);
+        }
+        match self.arp.next_due() {
+            Some(t) if t.is_finite() => (t.ceil().max(1.0) as usize).min(limit),
+            _ => limit,
+        }
+    }
+
     /// Fills `left` and `right` (same length) with the next samples.
     pub fn render_stereo(&mut self, left: &mut [f32], right: &mut [f32]) {
         debug_assert_eq!(left.len(), right.len());
-        for (l, r) in left.chunks_mut(BLOCK).zip(right.chunks_mut(BLOCK)) {
-            self.render_block(l, r);
+        let mut pos = 0;
+        while pos < left.len() {
+            let n = self.arp_until_next((left.len() - pos).min(BLOCK));
+            self.render_block(&mut left[pos..pos + n], &mut right[pos..pos + n]);
+            self.arp.advance(n);
+            pos += n;
         }
     }
 
     /// Fills `out` with the next samples, left and right mixed (for tests and tools).
     pub fn render(&mut self, out: &mut [f32]) {
-        for chunk in out.chunks_mut(BLOCK) {
+        let mut pos = 0;
+        while pos < out.len() {
+            let n = self.arp_until_next((out.len() - pos).min(BLOCK));
             let mut r = [0.0f32; BLOCK];
-            let r = &mut r[..chunk.len()];
-            self.render_block(chunk, r);
+            let chunk = &mut out[pos..pos + n];
+            self.render_block(chunk, &mut r[..n]);
             for (l, r) in chunk.iter_mut().zip(r.iter()) {
                 *l = 0.5 * (*l + *r);
             }
+            self.arp.advance(n);
+            pos += n;
         }
     }
 
@@ -675,6 +743,62 @@ mod modulation_tests {
         e.handle(Event::NoteOn { note: 60, velocity: 100 });
         let (l, _) = render_lr(&mut e, 48_000);
         assert!(rms(&l) > 0.01 && hz(&l) > 3_000.0, "{} {}", rms(&l), hz(&l));
+    }
+
+    /// (sample, note, started?) for every change of the held notes, one sample at a time.
+    fn arp_trace(e: &mut Engine, samples: usize) -> Vec<(usize, u8, bool)> {
+        let mut changes = Vec::new();
+        let mut before = e.held_notes();
+        let (mut l, mut r) = ([0.0f32], [0.0f32]);
+        for t in 0..samples {
+            e.render_stereo(&mut l, &mut r);
+            let now = e.held_notes();
+            for n in 0..128u8 {
+                let bit = 1u128 << n;
+                if (now ^ before) & bit != 0 {
+                    changes.push((t, n, now & bit != 0));
+                }
+            }
+            before = now;
+        }
+        changes
+    }
+
+    fn arp_patch() -> Patch {
+        let mut p = sine_patch();
+        p.arp = crate::ArpParams { on: true, gate: 0.5, bpm: 120.0, ..crate::ArpParams::default() };
+        p
+    }
+
+    #[test]
+    fn arpeggio_steps_on_exact_samples() {
+        let mut e = Engine::new(SR);
+        e.handle(Event::Patch(arp_patch()));
+        for n in [67, 60, 64] {
+            e.handle(Event::NoteOn { note: n, velocity: 100 });
+        }
+        let trace = arp_trace(&mut e, 19_000);
+        // 120 BPM sixteenths at 48 kHz: 6000 samples a step, half of it sounding.
+        let expect = [(0, 60, true), (3000, 60, false), (6000, 64, true), (9000, 64, false), (12000, 67, true), (15000, 67, false), (18000, 60, true)];
+        assert_eq!(trace, expect);
+    }
+
+    #[test]
+    fn host_tempo_wins_and_switching_off_returns_to_keys() {
+        let mut e = Engine::new(SR);
+        e.handle(Event::Patch(arp_patch()));
+        e.handle(Event::Tempo(60.0)); // half the speed: 12 000 samples a step
+        e.handle(Event::NoteOn { note: 60, velocity: 100 });
+        e.handle(Event::NoteOn { note: 64, velocity: 100 });
+        let trace = arp_trace(&mut e, 13_000);
+        assert_eq!(trace.iter().filter(|c| c.2).map(|c| (c.0, c.1)).collect::<Vec<_>>(), [(0, 60), (12000, 64)]);
+        // Off: what the arpeggiator played is let go, keys play directly again.
+        let mut p = arp_patch();
+        p.arp.on = false;
+        e.handle(Event::Patch(p));
+        assert_eq!(e.held_notes(), 0);
+        e.handle(Event::NoteOn { note: 72, velocity: 100 });
+        assert_eq!(e.held_notes(), 1u128 << 72);
     }
 
     #[test]

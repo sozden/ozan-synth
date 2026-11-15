@@ -259,6 +259,10 @@ impl Plugin for OzanPlugin {
             self.sent = Some(patch);
         }
 
+        // The arpeggiator follows the host's tempo when it gives one.
+        if let Some(bpm) = context.transport().tempo {
+            engine.handle(Event::Tempo(bpm as f32));
+        }
         let frames = buffer.samples();
         let channels = buffer.as_slice();
         let [left, right] = channels else { return ProcessStatus::Error("OZAN Synth needs a stereo output") };

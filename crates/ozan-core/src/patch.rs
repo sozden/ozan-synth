@@ -4,6 +4,7 @@
 //! With the `serde` feature a patch can be written and read (e.g. as JSON). Fields
 //! missing from an older preset take their default values.
 
+use crate::arp::ArpParams;
 use crate::envelope::AdsrParams;
 use crate::filter::FilterMode;
 use crate::lfo::LfoWave;
@@ -232,6 +233,7 @@ pub struct Patch {
     /// Pitch-bend range in semitones each way (0..12).
     pub bend_range: f32,
     pub play: PlayParams,
+    pub arp: ArpParams,
     /// White noise level added to the oscillators, 0..1.
     pub noise: f32,
     pub unison: UnisonParams,
@@ -256,6 +258,7 @@ impl Default for Patch {
             wheel: WheelParams::default(),
             bend_range: 2.0,
             play: PlayParams::default(),
+            arp: ArpParams::default(),
             noise: 0.0,
             unison: UnisonParams::default(),
             mods: [ModSlot::default(); SLOTS],

@@ -3,7 +3,7 @@
 use std::f32::consts::PI;
 
 use egui::{self, Color32, Pos2, Rect, Sense, Stroke, Vec2};
-use ozan_core::{FilterMode, LfoWave, VoiceMode, Waveform};
+use ozan_core::{ArpMode, FilterMode, LfoWave, VoiceMode, Waveform};
 
 use crate::i18n::s;
 use crate::theme::{self, KnobStyle};
@@ -315,6 +315,34 @@ pub fn voice_mode_selector(ui: &mut egui::Ui, mode: &mut VoiceMode) -> bool {
             VoiceMode::Poly => s().poly_hint,
             VoiceMode::Mono => s().mono_hint,
             VoiceMode::Legato => s().legato_hint,
+        },
+    )
+}
+
+pub fn arp_mode_selector(ui: &mut egui::Ui, mode: &mut ArpMode) -> bool {
+    fn label(m: ArpMode) -> &'static str {
+        match m {
+            ArpMode::Up => s().arp_up,
+            ArpMode::Down => s().arp_down,
+            ArpMode::UpDown => s().arp_updown,
+            ArpMode::Random => s().arp_random,
+            ArpMode::Played => s().arp_played,
+        }
+    }
+    choice_row(
+        ui,
+        mode,
+        &ArpMode::ALL,
+        Vec2::new(46.0, 26.0),
+        |p, r, m, c| {
+            p.text(r.center(), egui::Align2::CENTER_CENTER, label(m), egui::FontId::proportional(11.5), c);
+        },
+        |m| match m {
+            ArpMode::Up => s().arp_up_hint,
+            ArpMode::Down => s().arp_down_hint,
+            ArpMode::UpDown => s().arp_updown_hint,
+            ArpMode::Random => s().arp_random_hint,
+            ArpMode::Played => s().arp_played_hint,
         },
     )
 }
