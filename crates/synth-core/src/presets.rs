@@ -1,4 +1,7 @@
 //! Factory presets: one example of each classic sound the engine can make.
+//!
+//! Volumes are matched by measurement (`synth-lab render`) so that switching
+//! presets does not jump in loudness: about -25 dB RMS for the test phrase.
 
 use crate::envelope::AdsrParams;
 use crate::filter::FilterMode;
@@ -30,7 +33,7 @@ pub fn factory() -> Vec<(&'static str, Patch)> {
     use Waveform::*;
     let d = Patch::default();
     vec![
-        ("Başlangıç", d),
+        ("Başlangıç", Patch { volume: 0.89, ..d }),
         (
             "Acid bas",
             Patch {
@@ -38,6 +41,7 @@ pub fn factory() -> Vec<(&'static str, Patch)> {
                 filter: filter(Lp24, 180.0, 0.82, 0.55, 0.3),
                 filter_env: adsr(0.002, 0.18, 0.0, 0.1),
                 amp_env: adsr(0.002, 0.3, 0.9, 0.08),
+                volume: 0.3,
                 ..d
             },
         ),
@@ -48,6 +52,7 @@ pub fn factory() -> Vec<(&'static str, Patch)> {
                 filter: filter(Lp24, 300.0, 0.2, 0.35, 0.3),
                 filter_env: adsr(0.003, 0.35, 0.2, 0.15),
                 amp_env: adsr(0.003, 0.2, 1.0, 0.1),
+                volume: 0.47,
                 ..d
             },
         ),
@@ -58,6 +63,7 @@ pub fn factory() -> Vec<(&'static str, Patch)> {
                 filter: filter(Lp24, 220.0, 0.6, 0.1, 0.2),
                 amp_env: adsr(0.005, 0.2, 1.0, 0.15),
                 lfo: lfo(LfoWave::Sine, 3.0, 0.0, 0.6, 0.0),
+                volume: 0.47,
                 ..d
             },
         ),
@@ -69,6 +75,7 @@ pub fn factory() -> Vec<(&'static str, Patch)> {
                 filter_env: adsr(1.2, 2.0, 0.6, 2.0),
                 amp_env: adsr(0.8, 1.0, 0.9, 2.5),
                 lfo: lfo(LfoWave::Triangle, 0.3, 0.0, 0.15, 0.0),
+                volume: 0.82,
                 ..d
             },
         ),
@@ -79,6 +86,7 @@ pub fn factory() -> Vec<(&'static str, Patch)> {
                 filter: filter(Lp24, 500.0, 0.1, 0.55, 0.5),
                 filter_env: adsr(0.08, 0.6, 0.45, 0.3),
                 amp_env: adsr(0.04, 0.2, 0.9, 0.25),
+                volume: 0.66,
                 ..d
             },
         ),
@@ -89,6 +97,7 @@ pub fn factory() -> Vec<(&'static str, Patch)> {
                 filter: filter(Lp24, 250.0, 0.35, 0.7, 0.8),
                 filter_env: adsr(0.001, 0.25, 0.0, 0.25),
                 amp_env: adsr(0.001, 0.6, 0.0, 0.4),
+                volume: 0.72,
                 ..d
             },
         ),
@@ -100,6 +109,7 @@ pub fn factory() -> Vec<(&'static str, Patch)> {
                 amp_env: adsr(0.01, 0.2, 1.0, 0.2),
                 lfo: lfo(LfoWave::Sine, 5.5, 0.15, 0.0, 0.0),
                 wheel: WheelParams { vibrato: 1.0, cutoff: 0.2 },
+                volume: 0.54,
                 ..d
             },
         ),
@@ -110,6 +120,7 @@ pub fn factory() -> Vec<(&'static str, Patch)> {
                 filter: filter(Lp12, 8000.0, 0.0, 0.0, 0.0),
                 amp_env: adsr(0.005, 0.1, 1.0, 0.08),
                 lfo: lfo(LfoWave::Sine, 6.0, 0.0, 0.0, 0.4),
+                volume: 0.57,
                 ..d
             },
         ),
@@ -120,6 +131,7 @@ pub fn factory() -> Vec<(&'static str, Patch)> {
                 filter: filter(Lp24, 600.0, 0.75, 0.2, 0.5),
                 amp_env: adsr(0.005, 0.3, 1.0, 0.3),
                 lfo: lfo(LfoWave::SampleHold, 8.0, 0.0, 0.5, 0.0),
+                volume: 0.33,
                 ..d
             },
         ),
@@ -129,6 +141,7 @@ pub fn factory() -> Vec<(&'static str, Patch)> {
                 osc: [osc(Sine, 0, 0, 0.0, 1.0), OFF],
                 filter: filter(Lp12, 20_000.0, 0.0, 0.0, 0.0),
                 amp_env: adsr(0.01, 0.3, 0.7, 0.4),
+                volume: 0.77,
                 ..d
             },
         ),

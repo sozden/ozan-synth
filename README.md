@@ -39,7 +39,21 @@ time — close your DAW (or let it release the keyboard) before connecting here.
 | `crates/synth-core` | Sound engine: oscillators, filter, envelopes, LFO, voices, MIDI parsing, factory presets. No required dependencies (`serde` optional), no allocation while rendering — meant to run later inside a plugin too. |
 | `crates/synth-app` | Standalone program: sound card (`cpal`), MIDI (`midir`), panel (`egui`). |
 
+| `crates/synth-lab` | Listening lab (not shipped): renders every preset to WAV with spectrograms and measurements, records the real output via WASAPI loopback. |
+
 Events from MIDI and the panel reach the audio thread through a lock-free queue (`rtrb`).
+
+## Listening lab
+
+```
+cargo run --release -p synth-lab -- render lab-out        # every preset: WAV + spectrogram + table
+cargo run --release -p synth-lab -- loopback 7 out.wav    # record what the computer plays, look for dropouts
+cargo run --release -p synth-lab -- analyze out.wav       # measure a recording again
+```
+
+The test phrase plays a low note, a chord, a mod-wheel sweep, a pitch-bend swing, fast
+repeated notes and a high C7 (to show aliasing). The table lists peak and RMS level, DC
+offset, the level after all notes end, and a click score at every note start/end.
 
 ## Roadmap
 

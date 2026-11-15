@@ -13,6 +13,9 @@ const VOICE_GAIN: f32 = 0.2;
 /// cutoff) step once per block, about 0.7 ms.
 const BLOCK: usize = 32;
 
+/// Time constant of the LFO's smoothing, in seconds.
+const LFO_SLEW: f32 = 0.004;
+
 /// Something that happens to the engine, from MIDI or from the user interface.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Event {
@@ -44,7 +47,7 @@ pub struct Engine {
     wheel: f32,
     aftertouch: f32,
     lfo: Lfo,
-    /// Last LFO value, for the interface's light.
+    /// Smoothed LFO value, used for modulation and shown by the interface.
     lfo_value: f32,
     pedal: bool,
     counter: u64,
@@ -161,8 +164,12 @@ impl Engine {
     /// Modulation for the next `samples`, from the LFO, wheel, aftertouch and bend.
     fn modulation(&mut self, samples: usize) -> Modulation {
         let p = &self.patch;
-        let lfo = self.lfo.advance(p.lfo.wave, p.lfo.rate, samples as f32 / self.sample_rate);
-        self.lfo_value = lfo;
+        let raw = self.lfo.advance(p.lfo.wave, p.lfo.rate, samples as f32 / self.sample_rate);
+        // A few milliseconds of slew: square and sample & hold steps would
+        // otherwise jump the cutoff or level at once, which clicks.
+        let k = 1.0 - (-(samples as f32) / (LFO_SLEW * self.sample_rate)).exp();
+        self.lfo_value += (raw - self.lfo_value) * k;
+        let lfo = self.lfo_value;
         let wheel = self.wheel.max(self.aftertouch);
         Modulation {
             pitch: self.bend * p.bend_range + lfo * (p.lfo.pitch + wheel * p.wheel.vibrato),
@@ -342,6 +349,18 @@ mod modulation_tests {
         let pitches: Vec<f32> = (0..3000).map(|_| e.modulation(32).pitch).collect();
         let spread = pitches.iter().cloned().fold(f32::MIN, f32::max) - pitches.iter().cloned().fold(f32::MAX, f32::min);
         assert!((spread - 2.0 * p.wheel.vibrato).abs() < 0.05, "{spread}");
+    }
+
+    #[test]
+    fn stepped_lfo_does_not_jump_at_once() {
+        let mut e = Engine::new(SR);
+        let p = Patch { lfo: LfoParams { wave: LfoWave::Square, rate: 2.0, pitch: 0.0, cutoff: 1.0, amp: 0.0 }, ..Patch::default() };
+        e.handle(Event::Patch(p));
+        let cut: Vec<f32> = (0..3000).map(|_| e.modulation(32).cutoff_octaves).collect();
+        let biggest_step = cut.windows(2).map(|w| (w[1] - w[0]).abs()).fold(0.0f32, f32::max);
+        // The full swing is 2 × 4 octaves; one 32-sample block may move only part of it.
+        assert!(biggest_step < 0.2 * 2.0 * MOD_OCTAVES, "{biggest_step}");
+        assert!(cut.iter().cloned().fold(f32::MIN, f32::max) > 0.99 * MOD_OCTAVES);
     }
 
     #[test]
