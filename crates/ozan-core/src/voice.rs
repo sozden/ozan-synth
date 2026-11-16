@@ -65,6 +65,9 @@ pub struct Voice {
     filter2: [Filter; 2],
     /// After the drive, left and right.
     dc: [DcBlock; 2],
+    /// After FM and ring, left and right: both can leave a constant offset
+    /// (1 : 1 FM, the product of two related notes).
+    fm_dc: [DcBlock; 2],
     filter_env: Adsr,
     amp_env: Adsr,
     mod_env: Adsr,
@@ -142,6 +145,7 @@ impl Voice {
                 f.reset();
             }
             self.dc = Default::default();
+            self.fm_dc = Default::default();
             // Copies start at different points of the cycle, so they do not begin in
             // phase (louder, then a slow sweep). Copy 0 keeps the classic phases.
             for (k, row) in self.osc.iter_mut().enumerate() {
@@ -326,6 +330,10 @@ impl Voice {
             } else {
                 l *= norm;
                 r *= norm;
+            }
+            if fm > 0.0 || ring > 0.0 {
+                l = self.fm_dc[0].process(l, sample_rate);
+                r = if stereo { self.fm_dc[1].process(r, sample_rate) } else { l };
             }
             if drive > 0.0 {
                 l = self.dc[0].process(crate::filter::drive(l, drive), sample_rate);

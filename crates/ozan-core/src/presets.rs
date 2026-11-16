@@ -4,7 +4,7 @@
 //! presets does not jump in loudness: about -25 dB RMS while the test phrase
 //! plays (short plucks a little lower, judged by their peaks).
 
-use crate::arp::{ArpDivision, ArpMode, ArpParams};
+use crate::arp::{ArpDivision, ArpMode, ArpParams, SeqStep, SEQ_STEPS};
 use crate::envelope::AdsrParams;
 use crate::filter::FilterMode;
 use crate::lfo::LfoWave;
@@ -82,6 +82,20 @@ fn play(mode: VoiceMode, glide: f32, velocity: f32) -> PlayParams {
 
 fn arp(mode: ArpMode, division: ArpDivision, octaves: u8, gate: f32, bpm: f32) -> ArpParams {
     ArpParams { on: true, mode, division, octaves, gate, hold: false, bpm, ..ArpParams::default() }
+}
+
+/// A rest in [`seq`].
+const R: i8 = i8::MIN;
+
+/// Sequencer steps: notes from the key (`R` rests) and an `x` in `accents` or
+/// `ties` for each step that has one.
+fn seq(notes: [i8; SEQ_STEPS], accents: &str, ties: &str) -> [SeqStep; SEQ_STEPS] {
+    let marked = |s: &str, i: usize| s.as_bytes().get(i) == Some(&b'x');
+    let mut steps = [SeqStep::default(); SEQ_STEPS];
+    for (i, s) in steps.iter_mut().enumerate() {
+        *s = SeqStep { on: notes[i] != R, note: if notes[i] == R { 0 } else { notes[i] }, accent: marked(accents, i), tie: marked(ties, i) };
+    }
+    steps
 }
 
 /// Built-in presets, in the order they appear in the list.
@@ -754,6 +768,102 @@ pub fn factory() -> Vec<(&'static str, Patch)> {
                 lfo2: LfoParams { sync: true, division: NoteLength::Bar, ..lfo(LfoWave::Triangle, 0.5, 0.0, 0.0, 0.0) },
                 mods: mods(&[ModSlot::new(ModSource::Lfo2, ModDest::Cutoff2, 0.4)]),
                 fx: fx(chorus(0.4, 0.5, 0.5), None, reverb(0.7, 3.0, 0.4, 20.0, 0.35)),
+                volume: 1.0,
+                ..d
+            },
+        ),
+        (
+            "FM Bell",
+            Patch {
+                // 1 : 3.5, the classic inharmonic bell ratio; oscillator 2 only modulates.
+                osc: [osc(Sine, 0, 0, 0.0, 0.9), osc(Sine, 1, 10, -31.0, 0.0)],
+                filter: filter(Lp12, 12_000.0, 0.0, 0.0, 0.0),
+                amp_env: adsr(0.001, 4.0, 0.0, 3.0),
+                mod_env: adsr(0.001, 2.5, 0.0, 1.5),
+                fm: 0.15,
+                // Bright strike, mellow ring.
+                mods: mods(&[ModSlot::new(ModSource::ModEnv, ModDest::Fm, 0.4), ModSlot::new(ModSource::Velocity, ModDest::Fm, 0.15)]),
+                fx: fx(None, None, reverb(0.7, 3.0, 0.4, 15.0, 0.3)),
+                volume: 0.75,
+                ..d
+            },
+        ),
+        (
+            "FM E-Piano",
+            Patch {
+                // 1 : 1 with a short burst of FM: the tine's bark, harder when played harder.
+                osc: [osc(Sine, 0, 0, 0.0, 0.9), osc(Sine, 0, 0, 0.0, 0.0)],
+                filter: filter(Lp12, 8000.0, 0.0, 0.0, 0.3),
+                amp_env: adsr(0.002, 2.5, 0.2, 0.5),
+                mod_env: adsr(0.001, 0.5, 0.1, 0.3),
+                lfo: lfo(LfoWave::Sine, 4.5, 0.0, 0.0, 0.15),
+                fm: 0.06,
+                mods: mods(&[ModSlot::new(ModSource::ModEnv, ModDest::Fm, 0.2), ModSlot::new(ModSource::Velocity, ModDest::Fm, 0.25)]),
+                fx: fx(chorus(0.5, 0.45, 0.5), None, reverb(0.5, 1.6, 0.5, 10.0, 0.2)),
+                volume: 1.0,
+                ..d
+            },
+        ),
+        (
+            "FM Bass",
+            Patch {
+                osc: [osc(Sine, -1, 0, 0.0, 0.9), osc(Sine, -1, 0, 0.0, 0.0)],
+                filter: filter(Lp24, 2500.0, 0.0, 0.0, 0.3),
+                amp_env: adsr(0.002, 0.4, 0.8, 0.1),
+                mod_env: adsr(0.001, 0.25, 0.15, 0.1),
+                fm: 0.2,
+                mods: mods(&[ModSlot::new(ModSource::ModEnv, ModDest::Fm, 0.45)]),
+                play: play(VoiceMode::Mono, 0.0, 0.7),
+                volume: 0.92,
+                ..d
+            },
+        ),
+        (
+            "Ring Clang",
+            Patch {
+                // Only the product of the two: no note of either, just sum and difference.
+                osc: [osc(Sine, 0, 0, 0.0, 0.0), osc(Triangle, 1, 5, 13.0, 0.0)],
+                ring: 0.9,
+                filter: filter(Lp12, 7000.0, 0.1, 0.0, 0.3),
+                amp_env: adsr(0.001, 1.8, 0.0, 1.2),
+                fx: fx(None, delay(330.0, 0.35, 3500.0, true, 0.2), reverb(0.6, 2.5, 0.4, 10.0, 0.25)),
+                volume: 1.0,
+                ..d
+            },
+        ),
+        (
+            "Seq Acid",
+            Patch {
+                osc: [osc(Square, -1, 0, 0.0, 1.0), OFF],
+                filter: filter(Lp24, 200.0, 0.8, 0.5, 0.3),
+                filter_env: adsr(0.002, 0.2, 0.0, 0.1),
+                amp_env: adsr(0.002, 0.3, 0.9, 0.08),
+                // Accents open the filter; ties slide.
+                mods: mods(&[ModSlot::new(ModSource::Velocity, ModDest::Cutoff, 0.35)]),
+                play: play(VoiceMode::Legato, 0.06, 0.6),
+                arp: ArpParams {
+                    steps: seq([0, 0, 12, R, 0, 3, 0, 15, 0, 12, R, 10, 0, 7, 12, 0], "x...x..x...x..x.", ".....x.......x.."),
+                    ..arp(ArpMode::Sequence, ArpDivision::Sixteenth, 1, 0.55, 126.0)
+                },
+                fx: fx(None, Some(DelayParams { sync: true, division: NoteLength::EighthDotted, ..delay(357.0, 0.3, 2500.0, true, 0.15).unwrap() }), None),
+                volume: 0.43,
+                ..d
+            },
+        ),
+        (
+            "Seq Pluck",
+            Patch {
+                osc: [osc(Saw, 0, 0, 0.0, 0.7), osc(Square, 1, 0, 5.0, 0.3)],
+                filter: filter(Lp12, 900.0, 0.3, 0.55, 0.5),
+                filter_env: adsr(0.001, 0.25, 0.0, 0.2),
+                amp_env: adsr(0.001, 0.35, 0.0, 0.3),
+                // Twelve steps against the bar: the pattern shifts every time round.
+                arp: ArpParams {
+                    steps: seq([0, 7, 12, 3, R, 10, 7, 15, 12, R, 5, 10, 0, 0, 0, 0], "x..x....x...xxxx", "................"),
+                    length: 12,
+                    ..arp(ArpMode::Sequence, ArpDivision::Sixteenth, 1, 0.4, 112.0)
+                },
+                fx: fx(None, Some(DelayParams { sync: true, division: NoteLength::Eighth, ..delay(268.0, 0.4, 4000.0, true, 0.25).unwrap() }), reverb(0.6, 2.2, 0.4, 10.0, 0.25)),
                 volume: 1.0,
                 ..d
             },
