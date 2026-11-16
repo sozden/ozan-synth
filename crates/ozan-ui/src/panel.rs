@@ -85,9 +85,15 @@ fn tab_bar(ui: &mut egui::Ui, tab: &mut Tab) {
 /// envelopes and the scope). Below: tabs for modulation, effects, and playing.
 pub fn panel(ui: &mut egui::Ui, p: &mut Patch, bank: &WavetableBank, m: &Meters) {
     ui.spacing_mut().item_spacing = Vec2::new(12.0, 12.0);
-    let (top, middle) = (row(TOP), row(MIDDLE));
+    // A wavetable oscillator adds a row (table and frame), so the whole top row grows.
+    let tables = p.osc.iter().any(|o| o.wave == Waveform::Wavetable);
+    let (top, middle) = (row(TOP + if tables { 28.0 } else { 0.0 }), row(MIDDLE));
 
-    let w = widths(ui, &[200.0, 250.0, 250.0, 310.0, 282.0]);
+    // Wavetable oscillators grow a position knob; each knob takes 62 points.
+    let osc_width = |knobs: usize, wt: bool| (62.0 * (knobs + wt as usize) as f32).max(200.0);
+    let osc1 = osc_width(3, p.osc[0].wave == Waveform::Wavetable);
+    let osc2 = osc_width(4, p.osc[1].wave == Waveform::Wavetable);
+    let w = widths(ui, &[osc1, osc2, 248.0, 310.0, 244.0]);
     ui.horizontal_top(|ui| {
         for (i, osc) in p.osc.iter_mut().enumerate() {
             let (key, title) = if i == 0 { ("osc1", s().osc1) } else { ("osc2", s().osc2) };
@@ -125,7 +131,9 @@ pub fn panel(ui: &mut egui::Ui, p: &mut Patch, bank: &WavetableBank, m: &Meters)
             ui.add_space(32.0);
             ui.horizontal(|ui| {
                 Knob::keyed("volume", s().volume, &mut p.volume, 0.0, 1.0).default_value(0.7).format(percent).show(ui);
-                widgets::vu_meter(ui, m.vu, m.peak, Vec2::new(128.0, 92.0));
+                // The meter takes what the section has left, so a tight row still fits.
+                let vu = (ui.available_width() - 82.0).clamp(90.0, 140.0);
+                widgets::vu_meter(ui, m.vu, m.peak, Vec2::new(vu, 92.0));
                 ui.vertical(|ui| {
                     ui.label(RichText::new(s().voices).size(11.0).color(theme::t().muted));
                     ui.label(RichText::new(format!("{} / {}", m.voices, ozan_core::MAX_VOICES)).monospace().size(16.0));
@@ -378,6 +386,7 @@ const MATRIX: [f32; 6] = [14.0, 116.0, 14.0, 132.0, 118.0, 40.0];
 /// Source, destination and amount for each matrix slot, as rows of small screens.
 pub fn mod_matrix(ui: &mut egui::Ui, slots: &mut [ozan_core::ModSlot]) {
     let th = theme::t();
+    ui.spacing_mut().item_spacing.y = 4.0;
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 6.0;
         for (w, text) in [(MATRIX[0], ""), (MATRIX[1], s().source), (MATRIX[2], ""), (MATRIX[3], s().destination), (MATRIX[4] + 6.0 + MATRIX[5], s().amount)] {
