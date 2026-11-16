@@ -51,7 +51,11 @@ impl Settings {
 
     /// Stores and writes at once; a failed write only loses the setting.
     pub fn set(&mut self, key: &str, value: &str) {
-        self.0.insert(key.to_string(), value.to_string());
+        // Others (the preset browser, the plugin) write this file too: start from
+        // what is on disk, so their settings are not lost.
+        let mut fresh = Self::load();
+        fresh.0.insert(key.to_string(), value.to_string());
+        self.0 = fresh.0;
         let Some(path) = path() else { return };
         if let Some(dir) = path.parent() {
             let _ = std::fs::create_dir_all(dir);

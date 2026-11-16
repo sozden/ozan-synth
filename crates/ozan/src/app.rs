@@ -302,7 +302,9 @@ impl OzanApp {
         let rect = egui::Rect::from_min_size(egui::pos2(bar_right + 28.0, r.top()), egui::vec2(340.0, r.height()));
         let rate = self.audio.as_ref().ok().map(|a| a.sample_rate as f32);
         let idle = ozan_ui::lcd::idle_line(&self.patch, Some(self.status.voices()), rate);
-        ozan_ui::lcd::show_at(ui, rect, &ozan_ui::lcd::preset_line(&self.bar, &self.patch), &idle);
+        if ozan_ui::lcd::show_at(ui, rect, &ozan_ui::lcd::preset_line(&self.bar, &self.patch), &idle).on_hover_text(s().browse_hint).clicked() {
+            self.bar.toggle_browser(ui.ctx());
+        }
     }
 
     fn keyboard(&mut self, ui: &mut egui::Ui) {

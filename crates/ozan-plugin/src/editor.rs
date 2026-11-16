@@ -132,7 +132,9 @@ fn header(ui: &mut egui::Ui, params: &OzanParams, setter: &ParamSetter, window: 
         }
         ui.add_space(24.0);
         let idle = ozan_ui::lcd::idle_line(&patch, Some(voices), None);
-        ozan_ui::lcd::show(ui, egui::vec2(340.0, 46.0), &ozan_ui::lcd::preset_line(&window.bar, &patch), &idle);
+        if ozan_ui::lcd::show(ui, egui::vec2(340.0, 46.0), &ozan_ui::lcd::preset_line(&window.bar, &patch), &idle).on_hover_text(i18n::s().browse_hint).clicked() {
+            window.bar.toggle_browser(ui.ctx());
+        }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             let mut index = theme::current_index();
             egui::ComboBox::from_id_salt("theme").selected_text(theme::display_name(th)).width(130.0).show_ui(ui, |ui| {

@@ -113,13 +113,14 @@ pub fn bar_graph(painter: &egui::Painter, rect: Rect, norm: f32, bipolar: bool, 
 }
 
 /// The header screen: `title` on top; below, the control last moved or `idle`.
-pub fn show(ui: &mut egui::Ui, size: Vec2, title: &str, idle: &str) {
+pub fn show(ui: &mut egui::Ui, size: Vec2, title: &str, idle: &str) -> egui::Response {
     let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
-    show_at(ui, rect, title, idle);
+    show_at(ui, rect, title, idle)
 }
 
-/// As [`show`], drawn into `rect` without taking space in the layout.
-pub fn show_at(ui: &egui::Ui, rect: Rect, title: &str, idle: &str) {
+/// As [`show`], drawn into `rect` without taking space in the layout. The screen
+/// can be clicked (it opens the preset browser).
+pub fn show_at(ui: &egui::Ui, rect: Rect, title: &str, idle: &str) -> egui::Response {
     let th = theme::t();
     let ink = th.lcd_ink;
     let painter = ui.painter_at(rect.expand(2.0));
@@ -147,4 +148,5 @@ pub fn show_at(ui: &egui::Ui, rect: Rect, title: &str, idle: &str) {
             painter.text(low, Align2::LEFT_BOTTOM, idle, FontId::monospace(12.0), ink.gamma_multiply(0.65));
         }
     }
+    ui.interact(rect, ui.id().with("lcd_screen"), Sense::click()).on_hover_cursor(egui::CursorIcon::PointingHand)
 }
