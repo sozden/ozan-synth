@@ -300,7 +300,7 @@ impl OzanApp {
         let held = self.status.held_notes();
         let names: Vec<String> = (0..128u8).filter(|n| held & (1u128 << n) != 0).map(ozan_core::note_name).collect();
         ui.horizontal(|ui| {
-            ui.label(RichText::new(fill(s().pc_keys, &[&self.pc_octave])).size(12.0).color(theme::t().muted));
+            ui.label(RichText::new(fill(s().pc_keys, &[&self.pc_octave])).size(13.0).color(theme::t().muted));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.label(RichText::new(if names.is_empty() { "—".to_string() } else { names.join(" ") }).monospace().color(theme::t().accent));
             });

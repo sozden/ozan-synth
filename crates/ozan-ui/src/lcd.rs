@@ -137,14 +137,14 @@ pub fn show_at(ui: &egui::Ui, rect: Rect, title: &str, idle: &str) {
     let low = Pos2::new(rect.left() + pad, rect.bottom() - 7.0);
     match moved {
         Some((name, value, norm, bipolar)) => {
-            painter.text(low, Align2::LEFT_BOTTOM, name, FontId::monospace(11.0), ink.gamma_multiply(0.8));
-            painter.text(Pos2::new(rect.right() - pad, low.y), Align2::RIGHT_BOTTOM, value, FontId::monospace(11.0), ink);
+            painter.text(low, Align2::LEFT_BOTTOM, name, FontId::monospace(12.0), ink.gamma_multiply(0.8));
+            painter.text(Pos2::new(rect.right() - pad, low.y), Align2::RIGHT_BOTTOM, value, FontId::monospace(12.0), ink);
             let bar = Rect::from_min_size(Pos2::new(rect.right() - pad - 110.0, rect.top() + 10.0), Vec2::new(110.0, 9.0));
             bar_graph(&painter, bar, norm, bipolar, ink);
             ui.ctx().request_repaint_after(std::time::Duration::from_millis(200));
         }
         None => {
-            painter.text(low, Align2::LEFT_BOTTOM, idle, FontId::monospace(11.0), ink.gamma_multiply(0.65));
+            painter.text(low, Align2::LEFT_BOTTOM, idle, FontId::monospace(12.0), ink.gamma_multiply(0.65));
         }
     }
 }

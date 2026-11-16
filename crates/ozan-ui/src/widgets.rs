@@ -101,7 +101,7 @@ pub fn vu_meter(ui: &mut egui::Ui, level: f32, peak: f32, size: Vec2) {
         let long = !label.is_empty();
         painter.line_segment([point(p, radius), point(p, radius + if long { 6.0 } else { 4.0 })], Stroke::new(if long { 1.4 } else { 1.0 }, color));
         if long {
-            painter.text(point(p, radius + 13.0), egui::Align2::CENTER_CENTER, label, egui::FontId::proportional(10.0), color);
+            painter.text(point(p, radius + 13.0), egui::Align2::CENTER_CENTER, label, egui::FontId::proportional(11.0), color);
         }
     }
     painter.text(Pos2::new(face.center().x, face.bottom() - face.height() * 0.36), egui::Align2::CENTER_CENTER, "VU", egui::FontId::proportional(14.0), th.vu_ink);
@@ -177,7 +177,7 @@ pub fn piano(ui: &mut egui::Ui, low: u8, high: u8, lit: u128, mouse_note: &mut O
                 Pos2::new(r.center().x, r.bottom() - 10.0),
                 egui::Align2::CENTER_CENTER,
                 ozan_core::note_name(n),
-                egui::FontId::proportional(10.0),
+                egui::FontId::proportional(11.0),
                 Color32::from_gray(110),
             );
         }
@@ -230,7 +230,7 @@ pub fn led(ui: &mut egui::Ui, color: Color32) -> egui::Response {
 /// A labelled horizontal bar for a controller value (0..1).
 pub fn mini_bar(ui: &mut egui::Ui, label: &str, value: f32) {
     let th = theme::t();
-    ui.label(egui::RichText::new(label).size(11.0).color(th.muted));
+    ui.label(egui::RichText::new(label).size(12.0).color(th.muted));
     let (rect, _) = ui.allocate_exact_size(Vec2::new(56.0, 8.0), Sense::hover());
     let painter = ui.painter_at(rect);
     painter.rect_filled(rect, 2.0, th.screen);
@@ -249,7 +249,7 @@ pub fn toggle(ui: &mut egui::Ui, on: &mut bool, label: &str) -> bool {
         painter.rect_filled(rect, 8.0, track);
         let x = egui::lerp(rect.left() + 8.0..=rect.right() - 8.0, t);
         painter.circle_filled(Pos2::new(x, rect.center().y), 6.0, if *on { th.pointer } else { th.muted });
-        let text = ui.add(egui::Label::new(egui::RichText::new(label).size(12.0).color(if *on { th.text } else { th.muted })).sense(Sense::click()));
+        let text = ui.add(egui::Label::new(egui::RichText::new(label).size(13.0).color(if *on { th.text } else { th.muted })).sense(Sense::click()));
         let clicked = response.clicked() || text.clicked();
         if clicked {
             *on = !*on;
@@ -350,7 +350,7 @@ pub fn wheel(ui: &mut egui::Ui, label: &str, value: &mut f32, spring: bool, size
         Pos2::new(rect.center().x, rect.bottom() - 7.0),
         egui::Align2::CENTER_CENTER,
         label,
-        egui::FontId::proportional(11.0),
+        egui::FontId::proportional(12.0),
         if active { th.accent } else { th.muted },
     );
     *value != before

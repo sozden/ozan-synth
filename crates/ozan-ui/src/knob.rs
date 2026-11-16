@@ -94,7 +94,7 @@ impl<'a> Knob<'a> {
 
     /// Returns true when the value changed.
     pub fn show(self, ui: &mut egui::Ui) -> bool {
-        let (rect, response) = ui.allocate_exact_size(Vec2::new(60.0, 92.0), Sense::click_and_drag());
+        let (rect, response) = ui.allocate_exact_size(Vec2::new(64.0, 92.0), Sense::click_and_drag());
         let id = response.id;
         let before = *self.value;
         let learn_key = self.key.filter(|_| learn::is_enabled()).map(learn::full_key);
@@ -171,12 +171,12 @@ impl<'a> Knob<'a> {
                 painter.line_segment([center + dir * 3.0, center + dir * (radius - 12.5)], Stroke::new(1.6, th.pointer.gamma_multiply(0.8)));
             }
         }
-        painter.text(Pos2::new(center.x, rect.top() + 62.0), egui::Align2::CENTER_CENTER, self.label, egui::FontId::proportional(13.0), th.text);
+        painter.text(Pos2::new(center.x, rect.top() + 62.0), egui::Align2::CENTER_CENTER, self.label, egui::FontId::proportional(14.0), th.text);
         painter.text(
             Pos2::new(center.x, rect.top() + 80.0),
             egui::Align2::CENTER_CENTER,
             (self.format)(*self.value),
-            egui::FontId::monospace(11.0),
+            egui::FontId::monospace(12.0),
             if active { th.accent } else { th.muted },
         );
         if let Some(key) = learn_key {
@@ -190,7 +190,7 @@ impl<'a> Knob<'a> {
                 ui.ctx().request_repaint();
             }
             if let Some(cc) = bound {
-                painter.text(Pos2::new(rect.right() - 2.0, rect.top() + 2.0), egui::Align2::RIGHT_TOP, cc.to_string(), egui::FontId::monospace(9.0), th.accent);
+                painter.text(Pos2::new(rect.right() - 2.0, rect.top() + 2.0), egui::Align2::RIGHT_TOP, cc.to_string(), egui::FontId::monospace(10.0), th.accent);
             }
             let response = match bound {
                 Some(cc) => response.on_hover_text(fill(s().midi_bound, &[&cc])),
@@ -306,7 +306,7 @@ pub fn filter_mode_selector(ui: &mut egui::Ui, mode: &mut FilterMode) -> bool {
         &FilterMode::ALL,
         Vec2::new(40.0, 26.0),
         |p, r, m, c| {
-            p.text(r.center(), egui::Align2::CENTER_CENTER, short(m), egui::FontId::proportional(12.0), c);
+            p.text(r.center(), egui::Align2::CENTER_CENTER, short(m), egui::FontId::proportional(13.0), c);
         },
         |m| match m {
             FilterMode::Lp12 => s().lp12,
@@ -362,7 +362,7 @@ pub fn voice_mode_selector(ui: &mut egui::Ui, mode: &mut VoiceMode) -> bool {
         &VoiceMode::ALL,
         Vec2::new(54.0, 26.0),
         |p, r, m, c| {
-            p.text(r.center(), egui::Align2::CENTER_CENTER, label(m), egui::FontId::proportional(12.0), c);
+            p.text(r.center(), egui::Align2::CENTER_CENTER, label(m), egui::FontId::proportional(13.0), c);
         },
         |m| match m {
             VoiceMode::Poly => s().poly_hint,
@@ -388,7 +388,7 @@ pub fn arp_mode_selector(ui: &mut egui::Ui, mode: &mut ArpMode) -> bool {
         &ArpMode::ALL,
         Vec2::new(46.0, 26.0),
         |p, r, m, c| {
-            p.text(r.center(), egui::Align2::CENTER_CENTER, label(m), egui::FontId::proportional(11.5), c);
+            p.text(r.center(), egui::Align2::CENTER_CENTER, label(m), egui::FontId::proportional(12.5), c);
         },
         |m| match m {
             ArpMode::Up => s().arp_up_hint,

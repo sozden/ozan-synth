@@ -408,6 +408,327 @@ pub fn factory() -> Vec<(&'static str, Patch)> {
                 ..d
             },
         ),
+        // Added after the first 25, so earlier preset numbers keep their sound.
+        (
+            "Sub Bass",
+            Patch {
+                osc: [osc(Sine, -1, 0, 0.0, 1.0), osc(Triangle, -2, 0, 0.0, 0.35)],
+                play: play(VoiceMode::Legato, 0.04, 0.5),
+                filter: filter(Lp12, 500.0, 0.0, 0.0, 0.2),
+                amp_env: adsr(0.004, 0.2, 1.0, 0.12),
+                volume: 0.55,
+                ..d
+            },
+        ),
+        (
+            "Reese Bass",
+            Patch {
+                osc: [osc(Saw, -1, 0, 0.0, 0.8), osc(Saw, -1, 0, 18.0, 0.8)],
+                unison: unison(3, 22.0, 0.4),
+                filter: filter(Lp24, 650.0, 0.25, 0.15, 0.3),
+                amp_env: adsr(0.005, 0.2, 1.0, 0.15),
+                lfo2: lfo(LfoWave::Sine, 0.2, 0.0, 0.0, 0.0),
+                mods: mods(&[ModSlot::new(ModSource::Lfo2, ModDest::Cutoff, 0.12)]),
+                volume: 0.63,
+                ..d
+            },
+        ),
+        (
+            "Pluck Bass",
+            Patch {
+                osc: [osc(Square, -1, 0, 0.0, 0.8), osc(Saw, -1, 0, 5.0, 0.6)],
+                filter: filter(Lp24, 220.0, 0.35, 0.6, 0.4),
+                filter_env: adsr(0.001, 0.16, 0.0, 0.1),
+                amp_env: adsr(0.001, 0.45, 0.0, 0.12),
+                volume: 0.66,
+                ..d
+            },
+        ),
+        (
+            "Rubber Bass",
+            Patch {
+                osc: [osc(Sine, -1, 0, 0.0, 1.0), osc(Square, -1, 0, 0.0, 0.35)],
+                play: play(VoiceMode::Mono, 0.08, 0.6),
+                filter: filter(Lp24, 300.0, 0.55, 0.4, 0.3),
+                filter_env: adsr(0.002, 0.3, 0.1, 0.1),
+                amp_env: adsr(0.002, 0.3, 0.8, 0.1),
+                volume: 0.62,
+                ..d
+            },
+        ),
+        (
+            "Hoover",
+            Patch {
+                osc: [osc(Saw, 0, 0, 0.0, 0.8), osc(Saw, -1, 0, 0.0, 0.6)],
+                unison: unison(7, 45.0, 0.9),
+                play: play(VoiceMode::Legato, 0.15, 0.5),
+                filter: filter(Lp12, 2500.0, 0.15, 0.0, 0.3),
+                amp_env: adsr(0.01, 0.3, 0.9, 0.3),
+                mod_env: adsr(0.001, 0.25, 0.0, 0.2),
+                mods: mods(&[ModSlot::new(ModSource::ModEnv, ModDest::Pitch, -0.12)]),
+                volume: 0.81,
+                ..d
+            },
+        ),
+        (
+            "Square Lead",
+            Patch {
+                osc: [osc(Square, 0, 0, 0.0, 0.8), osc(Square, 1, 0, 5.0, 0.35)],
+                play: play(VoiceMode::Legato, 0.03, 0.6),
+                filter: filter(Lp24, 3000.0, 0.2, 0.2, 0.5),
+                filter_env: adsr(0.005, 0.4, 0.5, 0.3),
+                amp_env: adsr(0.005, 0.2, 0.9, 0.2),
+                fx: fx(None, delay(330.0, 0.3, 4000.0, true, 0.2), None),
+                volume: 0.49,
+                ..d
+            },
+        ),
+        (
+            "Saw Lead",
+            Patch {
+                osc: [osc(Saw, 0, 0, 0.0, 0.8), osc(Saw, 0, 0, 9.0, 0.8)],
+                play: play(VoiceMode::Legato, 0.06, 0.6),
+                filter: filter(Lp24, 4000.0, 0.25, 0.15, 0.5),
+                amp_env: adsr(0.005, 0.2, 0.9, 0.25),
+                fx: fx(None, delay(375.0, 0.35, 4500.0, true, 0.22), reverb(0.5, 1.6, 0.4, 10.0, 0.18)),
+                volume: 0.64,
+                ..d
+            },
+        ),
+        (
+            "Chip Lead",
+            Patch {
+                osc: [osc(Square, 0, 0, 0.0, 0.9), OFF],
+                filter: filter(Lp12, 20_000.0, 0.0, 0.0, 0.0),
+                amp_env: adsr(0.001, 0.1, 0.8, 0.05),
+                lfo: lfo(LfoWave::Triangle, 6.0, 0.15, 0.0, 0.0),
+                volume: 0.54,
+                ..d
+            },
+        ),
+        (
+            "Flute",
+            Patch {
+                osc: [osc(Sine, 0, 0, 0.0, 0.9), osc(Triangle, 1, 0, 0.0, 0.12)],
+                noise: 0.08,
+                filter: filter(Lp12, 2500.0, 0.1, 0.1, 0.6),
+                amp_env: adsr(0.08, 0.2, 0.85, 0.25),
+                lfo: lfo(LfoWave::Sine, 5.0, 0.08, 0.0, 0.05),
+                fx: fx(None, None, reverb(0.6, 2.2, 0.5, 15.0, 0.28)),
+                volume: 0.64,
+                ..d
+            },
+        ),
+        (
+            "Warm Pad",
+            Patch {
+                osc: [osc(Triangle, 0, 0, 0.0, 1.0), osc(Saw, 0, 0, 7.0, 0.6)],
+                filter: filter(Lp12, 900.0, 0.1, 0.15, 0.3),
+                filter_env: adsr(1.5, 2.0, 0.7, 2.0),
+                amp_env: adsr(1.0, 1.0, 0.9, 2.5),
+                fx: fx(chorus(0.4, 0.6, 0.7), None, reverb(0.8, 4.0, 0.55, 20.0, 0.4)),
+                volume: 0.91,
+                ..d
+            },
+        ),
+        (
+            "Glass Pad",
+            Patch {
+                osc: [wt(WavetableKind::Harmonics, 0.7, 0, 0.0, 0.7), osc(Sine, 1, 0, 4.0, 0.4)],
+                filter: filter(Lp12, 6000.0, 0.1, 0.0, 0.3),
+                amp_env: adsr(0.6, 1.0, 0.85, 3.0),
+                lfo2: lfo(LfoWave::Sine, 0.18, 0.0, 0.0, 0.0),
+                mods: mods(&[ModSlot::new(ModSource::Lfo2, ModDest::Osc1Position, 0.25)]),
+                fx: fx(chorus(0.3, 0.4, 0.4), delay(500.0, 0.35, 5000.0, true, 0.2), reverb(0.9, 5.5, 0.35, 30.0, 0.5)),
+                volume: 0.56,
+                ..d
+            },
+        ),
+        (
+            "Dark Strings",
+            Patch {
+                osc: [osc(Saw, 0, 0, -9.0, 0.95), osc(Saw, 0, 0, 9.0, 0.95)],
+                unison: unison(3, 12.0, 0.7),
+                filter: filter(Lp24, 1500.0, 0.1, 0.1, 0.4),
+                amp_env: adsr(0.5, 1.0, 0.9, 1.5),
+                lfo: lfo(LfoWave::Sine, 4.5, 0.05, 0.0, 0.0),
+                fx: fx(chorus(0.5, 0.5, 0.6), None, reverb(0.75, 3.0, 0.5, 20.0, 0.35)),
+                volume: 0.75,
+                ..d
+            },
+        ),
+        (
+            "Choir",
+            Patch {
+                osc: [wt(WavetableKind::Vowels, 0.35, 0, 0.0, 0.8), wt(WavetableKind::Vowels, 0.55, 0, 6.0, 0.6)],
+                unison: unison(5, 18.0, 0.8),
+                filter: filter(Lp12, 4000.0, 0.0, 0.0, 0.3),
+                amp_env: adsr(0.5, 1.0, 0.9, 2.0),
+                lfo2: lfo(LfoWave::Sine, 0.1, 0.0, 0.0, 0.0),
+                mods: mods(&[ModSlot::new(ModSource::Lfo2, ModDest::Osc1Position, 0.15), ModSlot::new(ModSource::Lfo2, ModDest::Osc2Position, -0.15)]),
+                fx: fx(chorus(0.3, 0.5, 0.5), None, reverb(0.85, 4.5, 0.5, 25.0, 0.45)),
+                volume: 0.96,
+                ..d
+            },
+        ),
+        (
+            "E-Piano",
+            Patch {
+                osc: [osc(Sine, 0, 0, 0.0, 0.9), osc(Triangle, 1, 0, 0.0, 0.25)],
+                filter: filter(Lp12, 2500.0, 0.0, 0.35, 0.5),
+                filter_env: adsr(0.001, 0.6, 0.2, 0.4),
+                amp_env: adsr(0.002, 1.6, 0.25, 0.5),
+                lfo: lfo(LfoWave::Sine, 4.0, 0.0, 0.0, 0.15),
+                mods: mods(&[ModSlot::new(ModSource::Velocity, ModDest::Cutoff, 0.3)]),
+                fx: fx(chorus(0.6, 0.4, 0.5), None, reverb(0.5, 1.5, 0.5, 10.0, 0.18)),
+                volume: 1.0,
+                ..d
+            },
+        ),
+        (
+            "Clav",
+            Patch {
+                osc: [wt(WavetableKind::Pulse, 0.75, 0, 0.0, 0.9), OFF],
+                filter: filter(Lp12, 2000.0, 0.3, 0.45, 0.6),
+                filter_env: adsr(0.001, 0.25, 0.2, 0.1),
+                amp_env: adsr(0.001, 0.5, 0.3, 0.08),
+                volume: 0.8,
+                ..d
+            },
+        ),
+        (
+            "Drawbar Organ",
+            Patch {
+                osc: [wt(WavetableKind::Harmonics, 1.0, 0, 0.0, 0.7), osc(Sine, -1, 0, 0.0, 0.5)],
+                filter: filter(Lp12, 8000.0, 0.0, 0.0, 0.0),
+                amp_env: adsr(0.005, 0.1, 1.0, 0.05),
+                lfo: lfo(LfoWave::Sine, 6.5, 0.0, 0.0, 0.08),
+                fx: fx(chorus(1.2, 0.5, 0.6), None, reverb(0.4, 1.2, 0.5, 5.0, 0.15)),
+                volume: 0.93,
+                ..d
+            },
+        ),
+        (
+            "Marimba",
+            Patch {
+                osc: [osc(Sine, 0, 0, 0.0, 0.9), osc(Sine, 2, 0, 0.0, 0.25)],
+                filter: filter(Lp12, 5000.0, 0.0, 0.0, 0.3),
+                amp_env: adsr(0.001, 0.45, 0.0, 0.35),
+                fx: fx(None, None, reverb(0.4, 1.2, 0.5, 5.0, 0.15)),
+                volume: 0.85,
+                ..d
+            },
+        ),
+        (
+            "Kalimba",
+            Patch {
+                osc: [osc(Sine, 0, 0, 0.0, 0.9), osc(Triangle, 2, 0, 0.0, 0.2)],
+                filter: filter(Lp12, 4000.0, 0.0, 0.0, 0.3),
+                amp_env: adsr(0.001, 0.8, 0.0, 0.6),
+                fx: fx(None, delay(280.0, 0.3, 3000.0, true, 0.22), reverb(0.6, 2.0, 0.4, 10.0, 0.25)),
+                volume: 0.85,
+                ..d
+            },
+        ),
+        (
+            "Brass Stab",
+            Patch {
+                osc: [osc(Saw, 0, 0, 0.0, 0.8), osc(Saw, 0, 0, 6.0, 0.8)],
+                filter: filter(Lp24, 600.0, 0.15, 0.7, 0.4),
+                filter_env: adsr(0.02, 0.25, 0.1, 0.2),
+                amp_env: adsr(0.005, 0.35, 0.0, 0.2),
+                fx: fx(None, None, reverb(0.6, 1.8, 0.4, 10.0, 0.2)),
+                volume: 0.75,
+                ..d
+            },
+        ),
+        (
+            "Gated Pad",
+            Patch {
+                osc: [osc(Saw, 0, 0, 0.0, 0.7), osc(Saw, 0, 0, 7.0, 0.7)],
+                unison: unison(5, 25.0, 0.8),
+                filter: filter(Lp12, 2500.0, 0.1, 0.0, 0.3),
+                amp_env: adsr(0.05, 0.5, 1.0, 0.6),
+                lfo: lfo(LfoWave::Square, 8.0, 0.0, 0.0, 1.0),
+                fx: fx(None, delay(250.0, 0.3, 4000.0, true, 0.2), reverb(0.7, 2.5, 0.4, 15.0, 0.3)),
+                volume: 0.89,
+                ..d
+            },
+        ),
+        (
+            "Laser",
+            Patch {
+                osc: [osc(Saw, 1, 0, 0.0, 0.8), osc(Square, 1, 0, 10.0, 0.5)],
+                filter: filter(Lp12, 6000.0, 0.3, 0.0, 0.3),
+                amp_env: adsr(0.001, 0.35, 0.0, 0.2),
+                mod_env: adsr(0.001, 0.3, 0.0, 0.2),
+                mods: mods(&[ModSlot::new(ModSource::ModEnv, ModDest::Pitch, 1.0)]),
+                fx: fx(None, delay(220.0, 0.45, 3000.0, true, 0.3), None),
+                volume: 0.6,
+                ..d
+            },
+        ),
+        (
+            "Ocean",
+            Patch {
+                osc: [OFF, OFF],
+                noise: 1.0,
+                filter: filter(Lp12, 1000.0, 0.2, 0.0, 0.0),
+                amp_env: adsr(1.5, 1.0, 1.0, 3.0),
+                lfo: lfo(LfoWave::Sine, 0.12, 0.0, 0.7, 0.25),
+                fx: fx(chorus(0.2, 0.6, 0.5), None, reverb(0.9, 6.0, 0.5, 40.0, 0.5)),
+                volume: 1.0,
+                ..d
+            },
+        ),
+        (
+            "Arp Bass",
+            Patch {
+                osc: [osc(Saw, -1, 0, 0.0, 0.8), osc(Square, -1, 0, 7.0, 0.5)],
+                filter: filter(Lp24, 300.0, 0.45, 0.5, 0.4),
+                filter_env: adsr(0.001, 0.15, 0.1, 0.1),
+                amp_env: adsr(0.001, 0.2, 0.5, 0.08),
+                arp: arp(ArpMode::Up, ArpDivision::Sixteenth, 1, 0.6, 122.0),
+                volume: 0.76,
+                ..d
+            },
+        ),
+        (
+            "Arp Sparkle",
+            Patch {
+                osc: [osc(Triangle, 1, 0, 0.0, 0.8), osc(Sine, 2, 0, 0.0, 0.3)],
+                filter: filter(Lp12, 6000.0, 0.0, 0.0, 0.3),
+                amp_env: adsr(0.001, 0.25, 0.0, 0.25),
+                arp: arp(ArpMode::UpDown, ArpDivision::Sixteenth, 3, 0.5, 118.0),
+                fx: fx(None, delay(381.0, 0.4, 4000.0, true, 0.3), reverb(0.8, 3.5, 0.4, 20.0, 0.35)),
+                volume: 1.0,
+                ..d
+            },
+        ),
+        (
+            "Dub Chord",
+            Patch {
+                osc: [osc(Saw, 0, 0, 0.0, 0.7), osc(Saw, 0, 7, 0.0, 0.6)],
+                filter: filter(Lp24, 700.0, 0.3, 0.45, 0.4),
+                filter_env: adsr(0.001, 0.2, 0.0, 0.15),
+                amp_env: adsr(0.001, 0.3, 0.0, 0.2),
+                fx: fx(None, delay(375.0, 0.6, 2200.0, true, 0.4), reverb(0.7, 3.0, 0.5, 15.0, 0.3)),
+                volume: 0.9,
+                ..d
+            },
+        ),
+        (
+            "Talking Bass",
+            Patch {
+                osc: [wt(WavetableKind::Vowels, 0.0, -1, 0.0, 0.9), osc(Sine, -2, 0, 0.0, 0.4)],
+                filter: filter(Lp24, 2000.0, 0.2, 0.0, 0.3),
+                amp_env: adsr(0.005, 0.2, 1.0, 0.15),
+                lfo: lfo(LfoWave::Triangle, 2.0, 0.0, 0.0, 0.0),
+                mods: mods(&[ModSlot::new(ModSource::Lfo, ModDest::Osc1Position, 0.5)]),
+                volume: 0.73,
+                ..d
+            },
+        ),
     ]
 }
 

@@ -128,7 +128,7 @@ pub fn draw(ui: &mut egui::Ui, x: &[f32], sample_rate: f32, mode: Mode, size: Ve
                 let xg = fx(f);
                 painter.line_segment([Pos2::new(xg, r.top()), Pos2::new(xg, r.bottom())], grid);
                 let label = if f >= 1000.0 { format!("{}k", f / 1000.0) } else { format!("{f}") };
-                painter.text(Pos2::new(xg + 3.0, r.bottom() - 2.0), egui::Align2::LEFT_BOTTOM, label, egui::FontId::proportional(9.0), th.muted);
+                painter.text(Pos2::new(xg + 3.0, r.bottom() - 2.0), egui::Align2::LEFT_BOTTOM, label, egui::FontId::proportional(10.0), th.muted);
             }
             if x.len() < FFT_LEN {
                 return;

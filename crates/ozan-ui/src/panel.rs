@@ -50,7 +50,7 @@ fn widths(ui: &egui::Ui, content: &[f32]) -> Vec<f32> {
 /// Content heights of the rows; every section in a row is as tall as the row.
 const TOP: f32 = 136.0;
 const MIDDLE: f32 = 126.0;
-const LOWER: f32 = 178.0;
+const LOWER: f32 = 206.0;
 
 /// Outer height of a row whose content is `content` tall.
 fn row(content: f32) -> f32 {
@@ -70,7 +70,7 @@ fn tab_bar(ui: &mut egui::Ui, tab: &mut Tab) {
             if !on {
                 ui.painter().rect_stroke(rect, 4.0, egui::Stroke::new(1.0, th.track), egui::StrokeKind::Inside);
             }
-            ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, label, egui::FontId::proportional(12.5), if on { th.text } else { th.muted });
+            ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, label, egui::FontId::proportional(13.5), if on { th.text } else { th.muted });
             if response.clicked() {
                 *tab = t;
             }
@@ -89,11 +89,11 @@ pub fn panel(ui: &mut egui::Ui, p: &mut Patch, bank: &WavetableBank, m: &Meters)
     let tables = p.osc.iter().any(|o| o.wave == Waveform::Wavetable);
     let (top, middle) = (row(TOP + if tables { 28.0 } else { 0.0 }), row(MIDDLE));
 
-    // Wavetable oscillators grow a position knob; each knob takes 62 points.
-    let osc_width = |knobs: usize, wt: bool| (62.0 * (knobs + wt as usize) as f32).max(200.0);
+    // Wavetable oscillators grow a position knob; each knob takes 66 points.
+    let osc_width = |knobs: usize, wt: bool| (66.0 * (knobs + wt as usize) as f32).max(200.0);
     let osc1 = osc_width(3, p.osc[0].wave == Waveform::Wavetable);
     let osc2 = osc_width(4, p.osc[1].wave == Waveform::Wavetable);
-    let w = widths(ui, &[osc1, osc2, 248.0, 310.0, 244.0]);
+    let w = widths(ui, &[osc1, osc2, 264.0, 330.0, 240.0]);
     ui.horizontal_top(|ui| {
         for (i, osc) in p.osc.iter_mut().enumerate() {
             let (key, title) = if i == 0 { ("osc1", s().osc1) } else { ("osc2", s().osc2) };
@@ -140,7 +140,7 @@ pub fn panel(ui: &mut egui::Ui, p: &mut Patch, bank: &WavetableBank, m: &Meters)
         });
     });
 
-    let w = widths(ui, &[370.0, 370.0, 500.0]);
+    let w = widths(ui, &[390.0, 390.0, 500.0]);
     ui.horizontal_top(|ui| {
         theme::section_box(ui, "filter_env", s().filter_env, Vec2::new(w[0], middle), |ui| envelope(ui, &mut p.filter_env));
         theme::section_box(ui, "amp_env", s().amp_env, Vec2::new(w[1], middle), |ui| envelope(ui, &mut p.amp_env));
@@ -160,7 +160,7 @@ pub fn panel(ui: &mut egui::Ui, p: &mut Patch, bank: &WavetableBank, m: &Meters)
     let lower = row(LOWER).max(left);
     match tab {
         Tab::Modulation => {
-            let w = widths(ui, &[250.0, 220.0, 370.0, 556.0]);
+            let w = widths(ui, &[264.0, 230.0, 390.0, 614.0]);
             ui.horizontal_top(|ui| {
                 theme::section_box(ui, "lfo", s().lfo, Vec2::new(w[0], lower), |ui| {
                     ui.horizontal(|ui| {
@@ -392,10 +392,10 @@ const DESTS: [(ModDest, &str); 13] = [
 ];
 
 /// Pin matrix cell size, the width of the source names and of the screen beside it.
-const CELL: Vec2 = Vec2::new(24.0, 16.0);
-const NAMES: f32 = 72.0;
-const HEAD: f32 = 16.0;
-const SCREEN: Vec2 = Vec2::new(150.0, 80.0);
+const CELL: Vec2 = Vec2::new(26.0, 18.0);
+const NAMES: f32 = 96.0;
+const HEAD: f32 = 20.0;
+const SCREEN: Vec2 = Vec2::new(170.0, 88.0);
 
 /// Colour of a pin carrying `amount`: the accent for positive, a cool blue for negative.
 fn pin_color(amount: f32) -> egui::Color32 {
@@ -495,12 +495,12 @@ pub fn mod_matrix(ui: &mut egui::Ui, slots: &mut [ozan_core::ModSlot]) {
         }
         for (c, (_, code)) in DESTS.iter().enumerate() {
             let on = hovered.is_some_and(|h| h.1 == c);
-            painter.text(egui::pos2(grid.left() + (c as f32 + 0.5) * CELL.x, rect.top() + HEAD / 2.0 - 1.0), egui::Align2::CENTER_CENTER, *code, egui::FontId::monospace(10.0), if on { th.text } else { th.muted });
+            painter.text(egui::pos2(grid.left() + (c as f32 + 0.5) * CELL.x, rect.top() + HEAD / 2.0 - 1.0), egui::Align2::CENTER_CENTER, *code, egui::FontId::monospace(12.0), if on { th.text } else { th.muted });
         }
         for (r, src) in sources.iter().enumerate() {
             let on = hovered.is_some_and(|h| h.0 == r);
             let y = grid.top() + (r as f32 + 0.5) * CELL.y;
-            painter.text(egui::pos2(rect.left(), y), egui::Align2::LEFT_CENTER, i18n::source_name(*src), egui::FontId::proportional(11.0), if on { th.text } else { th.muted });
+            painter.text(egui::pos2(rect.left(), y), egui::Align2::LEFT_CENTER, i18n::source_name(*src), egui::FontId::proportional(14.0), if on { th.text } else { th.muted });
             // A thin bus line along each row, as on a patch panel.
             painter.line_segment([egui::pos2(grid.left() + 4.0, y), egui::pos2(grid.right() - 4.0, y)], egui::Stroke::new(1.0, th.track.gamma_multiply(0.6)));
         }
@@ -538,31 +538,31 @@ pub fn mod_matrix(ui: &mut egui::Ui, slots: &mut [ozan_core::ModSlot]) {
             let used = slots.iter().filter(|s| s.source != ModSource::Off).count();
             match hovered {
                 Some((r, c)) => {
-                    painter.text(at(8.0), egui::Align2::LEFT_TOP, i18n::source_name(sources[r]).to_uppercase(), egui::FontId::monospace(11.0), ink);
-                    painter.text(at(24.0), egui::Align2::LEFT_TOP, format!("→ {}", i18n::dest_name(DESTS[c].0).to_uppercase()), egui::FontId::monospace(11.0), ink);
+                    painter.text(at(8.0), egui::Align2::LEFT_TOP, i18n::source_name(sources[r]).to_uppercase(), egui::FontId::monospace(13.0), ink);
+                    painter.text(at(26.0), egui::Align2::LEFT_TOP, format!("→ {}", i18n::dest_name(DESTS[c].0).to_uppercase()), egui::FontId::monospace(13.0), ink);
                     match find(slots, r, c) {
                         Some(i) => {
                             let a = slots[i].amount;
                             let bar = egui::Rect::from_min_size(at(46.0), Vec2::new(screen.width() - 16.0, 8.0));
                             crate::lcd::bar_graph(&painter, bar, 0.5 + 0.5 * a, true, ink);
-                            painter.text(at(60.0), egui::Align2::LEFT_TOP, format!("{:+.2}", a), egui::FontId::monospace(11.0), ink);
+                            painter.text(at(62.0), egui::Align2::LEFT_TOP, format!("{:+.2}", a), egui::FontId::monospace(13.0), ink);
                             crate::lcd::touch(&format!("{} → {}", i18n::source_name(sources[r]), i18n::dest_name(DESTS[c].0)), format!("{a:+.2}"), 0.5 + 0.5 * a, true, ui.input(|i| i.time));
                         }
                         None => {
                             let text = if used == slots.len() { s().pins_full } else { s().pins_connect };
-                            painter.text(at(52.0), egui::Align2::LEFT_TOP, text.to_uppercase(), egui::FontId::monospace(10.0), ink.gamma_multiply(0.6));
+                            painter.text(at(52.0), egui::Align2::LEFT_TOP, text.to_uppercase(), egui::FontId::monospace(12.0), ink.gamma_multiply(0.6));
                         }
                     }
                 }
                 None => {
-                    painter.text(at(8.0), egui::Align2::LEFT_TOP, s().mod_matrix.to_uppercase(), egui::FontId::monospace(11.0), ink);
-                    painter.text(at(26.0), egui::Align2::LEFT_TOP, i18n::fill(s().pins_used, &[&used, &slots.len()]), egui::FontId::monospace(11.0), ink.gamma_multiply(0.8));
+                    painter.text(at(8.0), egui::Align2::LEFT_TOP, s().mod_matrix.to_uppercase(), egui::FontId::monospace(13.0), ink);
+                    painter.text(at(28.0), egui::Align2::LEFT_TOP, i18n::fill(s().pins_used, &[&used, &slots.len()]), egui::FontId::monospace(13.0), ink.gamma_multiply(0.8));
                     let bar = egui::Rect::from_min_size(at(48.0), Vec2::new(screen.width() - 16.0, 8.0));
                     crate::lcd::bar_graph(&painter, bar, used as f32 / slots.len() as f32, false, ink);
                 }
             }
             ui.add_space(4.0);
-            ui.label(RichText::new(s().pins_hint).size(10.5).color(th.muted));
+            ui.label(RichText::new(s().pins_hint).size(13.0).color(th.muted));
         });
         if full {
             response.on_hover_text(s().pins_full);

@@ -75,7 +75,7 @@ pub static THEMES: [Theme; 2] = [
         skirt: rgb(0x2c, 0x2b, 0x29),
         pointer: rgb(0xf4, 0xf1, 0xea),
         text: rgb(0xe9, 0xdf, 0xc8),
-        muted: rgb(0xa3, 0x99, 0x85),
+        muted: rgb(0xbb, 0xb1, 0x9c),
         accent: rgb(0xe8, 0x74, 0x2a),
         accent_dark: rgb(0xb8, 0x52, 0x14),
         warm: rgb(0xef, 0xb0, 0x40),
@@ -105,9 +105,9 @@ pub static THEMES: [Theme; 2] = [
         skirt: rgb(0x2c, 0x2f, 0x3a),
         pointer: rgb(0xe6, 0xe6, 0xec),
         text: rgb(0xe6, 0xe6, 0xec),
-        muted: rgb(0x8c, 0x8f, 0x9c),
-        accent: rgb(0x8b, 0x7c, 0xf6),
-        accent_dark: rgb(0x5b, 0x4c, 0xc6),
+        muted: rgb(0xa8, 0xab, 0xb7),
+        accent: rgb(0x3f, 0xc9, 0xa0),
+        accent_dark: rgb(0x23, 0x86, 0x6a),
         warm: rgb(0xef, 0x9f, 0x27),
         hot: rgb(0xe2, 0x4b, 0x4a),
         good: rgb(0x3d, 0xc9, 0x8a),
@@ -156,11 +156,26 @@ pub fn apply(ctx: &egui::Context) {
     visuals.selection.bg_fill = th.accent_dark;
     visuals.widgets.hovered.bg_stroke.color = th.accent;
     visuals.override_text_color = Some(th.text);
+    // Larger type than egui's defaults, so labels read at a glance.
+    ctx.style_mut_of(egui::Theme::Dark, set_text_sizes);
+    ctx.style_mut_of(egui::Theme::Light, set_text_sizes);
     // The panel is always dark; without this egui follows a light Windows theme
     // and draws its own widgets (menus, sliders) light and blue.
     ctx.set_theme(egui::ThemePreference::Dark);
     ctx.set_visuals_of(egui::Theme::Dark, visuals.clone());
     ctx.set_visuals_of(egui::Theme::Light, visuals);
+}
+
+fn set_text_sizes(style: &mut egui::Style) {
+    use egui::{FontFamily::*, FontId, TextStyle};
+    style.text_styles = [
+        (TextStyle::Small, FontId::new(11.5, Proportional)),
+        (TextStyle::Body, FontId::new(14.0, Proportional)),
+        (TextStyle::Button, FontId::new(14.0, Proportional)),
+        (TextStyle::Heading, FontId::new(19.0, Proportional)),
+        (TextStyle::Monospace, FontId::new(13.5, Monospace)),
+    ]
+    .into();
 }
 
 /// Index of the theme saved under `key`.
@@ -211,7 +226,7 @@ fn section_sized<R>(ui: &mut egui::Ui, title: &str, size: Option<Vec2>, add: imp
                     }
                     ui.vertical(|ui| {
                         ui.spacing_mut().item_spacing.y = 6.0;
-                        ui.label(egui::RichText::new(title).size(12.0).color(th.muted).strong());
+                        ui.label(egui::RichText::new(title).size(13.0).color(th.muted).strong());
                         add(ui)
                     })
                     .inner
@@ -236,7 +251,7 @@ fn section_sized<R>(ui: &mut egui::Ui, title: &str, size: Option<Vec2>, add: imp
                     ui.vertical(|ui| {
                         ui.spacing_mut().item_spacing.y = 6.0;
                         let title = spaced(title);
-                        let galley = ui.painter().layout_no_wrap(title, egui::FontId::proportional(11.0), th.text);
+                        let galley = ui.painter().layout_no_wrap(title, egui::FontId::proportional(13.0), th.text);
                         let (rect, _) = ui.allocate_exact_size(Vec2::new(galley.size().x, 16.0), egui::Sense::hover());
                         let text_pos = Pos2::new(rect.left(), rect.center().y - galley.size().y / 2.0);
                         let inner = add(ui);

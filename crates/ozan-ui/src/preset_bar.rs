@@ -98,7 +98,7 @@ impl PresetBar {
                 for (i, preset) in self.list.iter().enumerate() {
                     if i == factory {
                         ui.separator();
-                        ui.label(RichText::new(s().your_presets).size(11.0).color(th.muted));
+                        ui.label(RichText::new(s().your_presets).size(12.0).color(th.muted));
                     }
                     if ui.selectable_label(self.current == Some(i), format!("{:02}  {}", i + 1, preset.name)).clicked() {
                         chosen = Some(i);
@@ -117,7 +117,7 @@ impl PresetBar {
             self.confirm_delete = true;
         }
         if let Some(note) = &self.note {
-            ui.label(RichText::new(note).size(11.0).color(th.warm));
+            ui.label(RichText::new(note).size(12.0).color(th.warm));
         }
         chosen.filter(|&i| self.load(i, patch))
     }
@@ -136,7 +136,7 @@ impl PresetBar {
                 field.request_focus();
                 let trimmed = name.trim();
                 if !trimmed.is_empty() && presets::path_for(trimmed).is_some_and(|p| p.exists()) {
-                    ui.label(RichText::new(s().will_overwrite).size(11.0).color(theme::t().warm));
+                    ui.label(RichText::new(s().will_overwrite).size(12.0).color(theme::t().warm));
                 }
                 ui.add_space(6.0);
                 ui.horizontal(|ui| {
