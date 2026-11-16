@@ -12,7 +12,7 @@ use crate::modmatrix::{ModDest, ModSlot, ModSource, SLOTS};
 use crate::oscillator::Waveform;
 use crate::wavetable::WavetableKind;
 use crate::patch::{
-    ChorusParams, DelayParams, EffectsParams, Filter2Params, FilterParams, FilterRouting, LfoParams, NoteLength, OscParams, Patch, PlayParams, ReverbParams, UnisonParams, VoiceMode,
+    ChorusParams, DelayParams, DistortionParams, DriveMode, EffectsParams, EqParams, PhaserParams, Filter2Params, FilterParams, FilterRouting, LfoParams, NoteLength, OscParams, Patch, PlayParams, ReverbParams, UnisonParams, VoiceMode,
     WheelParams,
 };
 
@@ -62,7 +62,7 @@ fn reverb(size: f32, decay: f32, damping: f32, predelay_ms: f32, mix: f32) -> Op
 /// Effects in use; the others stay off with their default settings.
 fn fx(c: Option<ChorusParams>, d: Option<DelayParams>, r: Option<ReverbParams>) -> EffectsParams {
     let off = EffectsParams::default();
-    EffectsParams { chorus: c.unwrap_or(off.chorus), delay: d.unwrap_or(off.delay), reverb: r.unwrap_or(off.reverb) }
+    EffectsParams { chorus: c.unwrap_or(off.chorus), delay: d.unwrap_or(off.delay), reverb: r.unwrap_or(off.reverb), ..off }
 }
 
 fn unison(voices: u8, detune: f32, spread: f32) -> UnisonParams {
@@ -865,6 +865,57 @@ pub fn factory() -> Vec<(&'static str, Patch)> {
                 },
                 fx: fx(None, Some(DelayParams { sync: true, division: NoteLength::Eighth, ..delay(268.0, 0.4, 4000.0, true, 0.25).unwrap() }), reverb(0.6, 2.2, 0.4, 10.0, 0.25)),
                 volume: 1.0,
+                ..d
+            },
+        ),
+        (
+            "Crunch Lead",
+            Patch {
+                osc: [osc(Saw, 0, 0, 0.0, 0.8), osc(Square, 0, 0, 6.0, 0.5)],
+                filter: filter(Lp24, 2500.0, 0.3, 0.3, 0.4),
+                filter_env: adsr(0.005, 0.4, 0.4, 0.3),
+                amp_env: adsr(0.005, 0.3, 0.9, 0.25),
+                play: play(VoiceMode::Legato, 0.05, 0.7),
+                fx: EffectsParams {
+                    distortion: DistortionParams { on: true, mode: DriveMode::Hard, drive: 0.55, tone: 5000.0, mix: 1.0 },
+                    eq: EqParams { on: true, low: -3.0, mid: 2.0, high: 0.0 },
+                    ..fx(None, delay(375.0, 0.3, 3000.0, true, 0.2), reverb(0.4, 1.2, 0.5, 10.0, 0.15))
+                },
+                volume: 0.28,
+                ..d
+            },
+        ),
+        (
+            "Phaser Pad",
+            Patch {
+                osc: [osc(Saw, 0, 0, 0.0, 0.7), osc(Saw, 0, 0, 9.0, 0.6)],
+                unison: unison(3, 18.0, 0.7),
+                filter: filter(Lp12, 3000.0, 0.1, 0.1, 0.4),
+                amp_env: adsr(0.6, 1.5, 0.85, 2.0),
+                fx: EffectsParams {
+                    phaser: PhaserParams { on: true, rate: 0.15, depth: 0.9, feedback: 0.6, mix: 1.0 },
+                    eq: EqParams { on: true, low: -2.0, mid: 0.0, high: 2.0 },
+                    ..fx(None, None, reverb(0.7, 3.5, 0.4, 20.0, 0.3))
+                },
+                volume: 1.0,
+                ..d
+            },
+        ),
+        (
+            "Fold Bass",
+            Patch {
+                osc: [osc(Sine, -1, 0, 0.0, 0.9), osc(Triangle, -1, 0, 0.0, 0.4)],
+                filter: filter(Lp24, 1800.0, 0.1, 0.2, 0.3),
+                filter_env: adsr(0.002, 0.3, 0.3, 0.1),
+                amp_env: adsr(0.003, 0.4, 0.85, 0.1),
+                play: play(VoiceMode::Mono, 0.0, 0.8),
+                // The harder the key, the louder into the folder: more overtones.
+                fx: EffectsParams {
+                    distortion: DistortionParams { on: true, mode: DriveMode::Fold, drive: 0.35, tone: 3500.0, mix: 1.0 },
+                    eq: EqParams { on: true, low: 3.0, mid: -2.0, high: -3.0 },
+                    ..EffectsParams::default()
+                },
+                volume: 0.33,
                 ..d
             },
         ),

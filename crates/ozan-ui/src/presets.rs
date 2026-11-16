@@ -58,11 +58,11 @@ pub fn factory_category(name: &str) -> Option<Category> {
     use Category::*;
     Some(match name {
         "Acid Bass" | "Fat Bass" | "Wobble Bass" | "Mono Bass" | "Gritty Bass" | "Sub Bass" | "Reese Bass" | "Pluck Bass" | "Rubber Bass"
-        | "Talking Bass" | "Tempo Wobble" | "FM Bass" => Bass,
+        | "Talking Bass" | "Tempo Wobble" | "FM Bass" | "Fold Bass" => Bass,
         "Init" | "Vibrato Lead" | "Supersaw" | "Sync Lead" | "Glide Lead" | "Pure Sine" | "Hoover" | "Square Lead" | "Saw Lead"
-        | "Chip Lead" | "Flute" => Lead,
+        | "Chip Lead" | "Flute" | "Crunch Lead" => Lead,
         "Soft Pad" | "Vowel Pad" | "PWM Strings" | "Evolving Pad" | "Warm Pad" | "Glass Pad" | "Dark Strings" | "Choir" | "Gated Pad"
-        | "Band Sweep" => Pad,
+        | "Band Sweep" | "Phaser Pad" => Pad,
         "Brass" | "Tremolo Organ" | "Harmonic Keys" | "E-Piano" | "Clav" | "Drawbar Organ" | "Brass Stab" | "Dub Chord" | "FM E-Piano" => Keys,
         "Pluck" | "Distant Bell" | "Marimba" | "Kalimba" | "FM Bell" | "Ring Clang" => Pluck,
         "Arp Pluck" | "Arp Bass" | "Arp Sparkle" | "Seq Acid" | "Seq Pluck" => Sequence,

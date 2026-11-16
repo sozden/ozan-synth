@@ -1,10 +1,11 @@
-//! Effects after the voices: chorus → delay → reverb, mono in, stereo out.
+//! Effects after the voices: distortion → phaser → chorus → delay → reverb → EQ,
+//! stereo. The distortion, phaser and EQ are skipped entirely while off.
 //!
 //! All buffers are made in [`Effects::new`]; processing does not allocate.
 
 use std::f32::consts::TAU;
 
-use crate::patch::{ChorusParams, DelayParams, EffectsParams, ReverbParams};
+use crate::patch::{ChorusParams, DelayParams, DistortionParams, DriveMode, EffectsParams, EqParams, PhaserParams, ReverbParams};
 
 /// Longest delay time, in seconds.
 pub const MAX_DELAY: f32 = 2.0;
@@ -220,6 +221,182 @@ impl Reverb {
     }
 }
 
+/// The distortion: drive into a shaper, a tone low-pass, and a level that stays
+/// about the same however hard it is driven.
+#[derive(Clone, Debug, Default)]
+pub struct Distortion {
+    tone: [f32; 2],
+}
+
+impl Distortion {
+    #[inline]
+    fn shape(mode: DriveMode, x: f32) -> f32 {
+        match mode {
+            DriveMode::Soft => x.tanh(),
+            DriveMode::Hard => x.clamp(-1.0, 1.0),
+            DriveMode::Fold => (x * std::f32::consts::FRAC_PI_2).sin(),
+        }
+    }
+
+    #[inline]
+    fn process(&mut self, l: f32, r: f32, p: &DistortionParams, wet: f32, sr: f32) -> (f32, f32) {
+        let gain = 10f32.powf(p.drive.clamp(0.0, 1.0) * 36.0 / 20.0);
+        // Measured on synth sounds: this keeps loud and quiet settings close.
+        let makeup = gain.powf(-0.55);
+        let c = lowpass(p.tone.clamp(500.0, 16_000.0), sr);
+        let mut out = [l, r];
+        for (k, x) in out.iter_mut().enumerate() {
+            let y = Self::shape(p.mode, *x * gain) * makeup;
+            self.tone[k] += (y - self.tone[k]) * c;
+            *x = *x * (1.0 - wet) + self.tone[k] * wet;
+        }
+        (out[0], out[1])
+    }
+}
+
+/// Phaser stages per side.
+const STAGES: usize = 6;
+
+/// Six first-order all-passes swept by a sine (a quarter cycle apart left and
+/// right), with feedback; mixed with the dry signal they cut moving notches.
+#[derive(Clone, Debug, Default)]
+pub struct Phaser {
+    phase: f32,
+    /// Last input and output of each stage, per side.
+    x1: [[f32; STAGES]; 2],
+    y1: [[f32; STAGES]; 2],
+    last: [f32; 2],
+}
+
+impl Phaser {
+    #[inline]
+    fn process(&mut self, l: f32, r: f32, p: &PhaserParams, wet: f32, sr: f32) -> (f32, f32) {
+        let depth = p.depth.clamp(0.0, 1.0);
+        let fb = p.feedback.clamp(0.0, 0.9);
+        let mut out = [l, r];
+        for (k, x) in out.iter_mut().enumerate() {
+            let lfo = ((self.phase + 0.25 * k as f32) * TAU).sin();
+            let hz = (700.0 * (lfo * 2.5 * depth).exp2()).min(sr * 0.45);
+            let t = (std::f32::consts::PI * hz / sr).tan();
+            let a = (t - 1.0) / (t + 1.0);
+            let mut v = *x + fb * self.last[k];
+            for s in 0..STAGES {
+                let y = a * v + self.x1[k][s] - a * self.y1[k][s];
+                self.x1[k][s] = v;
+                self.y1[k][s] = y;
+                v = y;
+            }
+            self.last[k] = v;
+            let w = 0.5 * wet;
+            *x = *x * (1.0 - w) + v * w;
+        }
+        self.phase = (self.phase + p.rate.clamp(0.0, 20.0) / sr).fract();
+        (out[0], out[1])
+    }
+}
+
+/// RBJ cookbook biquad, direct form I.
+#[derive(Clone, Copy, Debug, Default)]
+struct Biquad {
+    b: [f32; 3],
+    a: [f32; 2],
+    x: [f32; 2],
+    y: [f32; 2],
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Band {
+    LowShelf,
+    Bell,
+    HighShelf,
+}
+
+impl Biquad {
+    fn set(&mut self, band: Band, hz: f32, db: f32, sr: f32) {
+        let a = 10f32.powf(db / 40.0);
+        let w = TAU * hz / sr;
+        let (sin, cos) = w.sin_cos();
+        let (b, a0, a1, a2) = match band {
+            Band::Bell => {
+                let alpha = sin / (2.0 * 0.7);
+                ([1.0 + alpha * a, -2.0 * cos, 1.0 - alpha * a], 1.0 + alpha / a, -2.0 * cos, 1.0 - alpha / a)
+            }
+            Band::LowShelf | Band::HighShelf => {
+                // Shelf slope 1.
+                let k = 2.0 * a.sqrt() * sin / std::f32::consts::SQRT_2;
+                let (p, m) = (a + 1.0, a - 1.0);
+                if band == Band::LowShelf {
+                    (
+                        [a * (p - m * cos + k), 2.0 * a * (m - p * cos), a * (p - m * cos - k)],
+                        p + m * cos + k,
+                        -2.0 * (m + p * cos),
+                        p + m * cos - k,
+                    )
+                } else {
+                    (
+                        [a * (p + m * cos + k), -2.0 * a * (m + p * cos), a * (p + m * cos - k)],
+                        p - m * cos + k,
+                        2.0 * (m - p * cos),
+                        p - m * cos - k,
+                    )
+                }
+            }
+        };
+        self.b = [b[0] / a0, b[1] / a0, b[2] / a0];
+        self.a = [a1 / a0, a2 / a0];
+    }
+
+    #[inline]
+    fn process(&mut self, x: f32) -> f32 {
+        let y = self.b[0] * x + self.b[1] * self.x[0] + self.b[2] * self.x[1] - self.a[0] * self.y[0] - self.a[1] * self.y[1];
+        self.x = [x, self.x[0]];
+        self.y = [y, self.y[0]];
+        y
+    }
+}
+
+/// Where the three bands sit.
+const EQ_BANDS: [(Band, f32); 3] = [(Band::LowShelf, 250.0), (Band::Bell, 1000.0), (Band::HighShelf, 4000.0)];
+/// Samples between coefficient updates while a band's gain glides.
+const EQ_STEP: u32 = 32;
+
+#[derive(Clone, Debug, Default)]
+pub struct Eq {
+    filters: [[Biquad; 3]; 2],
+    /// Gains the coefficients were made for, gliding to the knobs.
+    gains: Option<[f32; 3]>,
+    count: u32,
+}
+
+impl Eq {
+    #[inline]
+    fn process(&mut self, l: f32, r: f32, p: &EqParams, wet: f32, sr: f32) -> (f32, f32) {
+        let target = [p.low, p.mid, p.high].map(|g| g.clamp(-12.0, 12.0));
+        if self.count == 0 || self.gains.is_none() {
+            let k = smoothing(0.03, sr / EQ_STEP as f32);
+            let mut g = self.gains.unwrap_or(target);
+            for (g, t) in g.iter_mut().zip(target) {
+                *g += (t - *g) * k;
+            }
+            if self.gains != Some(g) {
+                for side in &mut self.filters {
+                    for (f, (&(band, hz), &db)) in side.iter_mut().zip(EQ_BANDS.iter().zip(&g)) {
+                        f.set(band, hz, db, sr);
+                    }
+                }
+                self.gains = Some(g);
+            }
+        }
+        self.count = (self.count + 1) % EQ_STEP;
+        let mut out = [l, r];
+        for (x, side) in out.iter_mut().zip(&mut self.filters) {
+            let y = side.iter_mut().fold(*x, |v, f| f.process(v));
+            *x = *x * (1.0 - wet) + y * wet;
+        }
+        (out[0], out[1])
+    }
+}
+
 /// The effect chain with each effect's wet level smoothed, so switching one on or
 /// off fades instead of clicking.
 #[derive(Clone, Debug)]
@@ -228,7 +405,11 @@ pub struct Effects {
     chorus: Chorus,
     delay: Delay,
     reverb: Reverb,
-    wet: [f32; 3],
+    distortion: Distortion,
+    phaser: Phaser,
+    eq: Eq,
+    /// Chorus, delay, reverb, distortion, phaser, EQ.
+    wet: [f32; 6],
 }
 
 impl Effects {
@@ -238,7 +419,10 @@ impl Effects {
             chorus: Chorus::new(sample_rate),
             delay: Delay::new(sample_rate, &p.delay),
             reverb: Reverb::new(sample_rate),
-            wet: [0.0; 3],
+            distortion: Distortion::default(),
+            phaser: Phaser::default(),
+            eq: Eq::default(),
+            wet: [0.0; 6],
         }
     }
 
@@ -257,6 +441,9 @@ impl Effects {
             line.clear();
         }
         self.reverb.damp = [0.0; 8];
+        self.distortion = Distortion::default();
+        self.phaser = Phaser::default();
+        self.eq = Eq::default();
     }
 
     #[inline]
@@ -267,13 +454,28 @@ impl Effects {
             if p.chorus.on { p.chorus.mix.clamp(0.0, 1.0) } else { 0.0 },
             if p.delay.on { p.delay.mix.clamp(0.0, 1.0) } else { 0.0 },
             if p.reverb.on { p.reverb.mix.clamp(0.0, 1.0) } else { 0.0 },
+            if p.distortion.on { p.distortion.mix.clamp(0.0, 1.0) } else { 0.0 },
+            if p.phaser.on { p.phaser.mix.clamp(0.0, 1.0) } else { 0.0 },
+            if p.eq.on { 1.0 } else { 0.0 },
         ];
-        for (w, t) in self.wet.iter_mut().zip(targets) {
+        for (i, (w, t)) in self.wet.iter_mut().zip(targets).enumerate() {
             *w += (t - *w) * k;
+            // The newer effects stop altogether once faded out.
+            if i >= 3 && t == 0.0 && *w < 1e-5 {
+                *w = 0.0;
+            }
+        }
+        let (mut l, mut r) = (l, r);
+        if self.wet[3] > 0.0 {
+            (l, r) = self.distortion.process(l, r, &p.distortion, self.wet[3], sr);
+        }
+        if self.wet[4] > 0.0 {
+            (l, r) = self.phaser.process(l, r, &p.phaser, self.wet[4], sr);
         }
         let (l, r) = self.chorus.process(l, r, &p.chorus, self.wet[0], sr);
         let (l, r) = self.delay.process(l, r, &p.delay, self.wet[1], sr);
-        self.reverb.process(l, r, &p.reverb, self.wet[2], sr)
+        let (l, r) = self.reverb.process(l, r, &p.reverb, self.wet[2], sr);
+        if self.wet[5] > 0.0 { self.eq.process(l, r, &p.eq, self.wet[5], sr) } else { (l, r) }
     }
 }
 
@@ -388,6 +590,76 @@ mod tests {
         // A second after it stops only a few percent of the step's edge still
         // circulates (measured 0.004; without the high-passes the loops reach ~10).
         assert!(mean(&l[96_000..]).abs() < 0.02 && mean(&r[96_000..]).abs() < 0.02, "{} {}", mean(&l[96_000..]), mean(&r[96_000..]));
+    }
+
+    fn sine(hz: f32, n: usize, amp: f32) -> Vec<f32> {
+        (0..n).map(|i| amp * (TAU * hz * i as f32 / SR).sin()).collect()
+    }
+
+    fn rms(v: &[f32]) -> f32 {
+        (v.iter().map(|x| x * x).sum::<f32>() / v.len() as f32).sqrt()
+    }
+
+    #[test]
+    fn distortion_adds_harmonics_at_an_even_level() {
+        for mode in DriveMode::ALL {
+            let mut levels = Vec::new();
+            for drive in [0.2, 0.6, 1.0] {
+                let p = EffectsParams { distortion: DistortionParams { on: true, mode, drive, tone: 16_000.0, mix: 1.0 }, ..Default::default() };
+                let (mut fx, p) = settled(p);
+                let x = sine(220.0, 24_000, 0.2);
+                let (l, r) = run(&mut fx, &p, &x);
+                assert!(l.iter().chain(&r).all(|v| v.is_finite() && v.abs() <= 1.0));
+                // A pure sine has smooth steps; the shaped one has sharper ones.
+                let step = |v: &[f32]| v.windows(2).map(|w| (w[1] - w[0]).abs()).fold(0.0f32, f32::max);
+                if drive == 1.0 {
+                    assert!(step(&l[12_000..]) > 1.5 * step(&x[12_000..]), "{mode:?}");
+                }
+                levels.push(rms(&l[12_000..]));
+            }
+            // From light to full drive the level stays within about 14 dB.
+            let (lo, hi) = levels.iter().fold((f32::MAX, 0.0f32), |(a, b), &v| (a.min(v), b.max(v)));
+            assert!(hi / lo < 5.0, "{mode:?}: {levels:?}");
+        }
+    }
+
+    #[test]
+    fn phaser_moves_notches_in_stereo_and_stays_stable() {
+        let p = EffectsParams { phaser: PhaserParams { on: true, rate: 1.0, depth: 1.0, feedback: 0.9, mix: 1.0 }, ..Default::default() };
+        let (mut fx, p) = settled(p);
+        let noise: Vec<f32> = (0..96_000u32).map(|i| (i.wrapping_mul(2_654_435_761) >> 8) as f32 / (1u32 << 24) as f32 - 0.5).collect();
+        let (l, r) = run(&mut fx, &p, &noise);
+        assert!(l.iter().chain(&r).all(|v| v.is_finite() && v.abs() < 4.0));
+        let differs = l.iter().zip(&r).filter(|(a, b)| (*a - *b).abs() > 0.01).count();
+        assert!(differs > 30_000, "{differs}");
+        // A steady tone rises and falls in level as the notches pass over it.
+        let p2 = EffectsParams { phaser: PhaserParams { feedback: 0.0, ..p.phaser }, ..Default::default() };
+        let (mut fx, p2) = settled(p2);
+        let (l, _) = run(&mut fx, &p2, &sine(700.0, 96_000, 0.5));
+        let blocks: Vec<f32> = l[4800..].chunks(960).map(rms).collect();
+        let (lo, hi) = blocks.iter().fold((f32::MAX, 0.0f32), |(a, b), &v| (a.min(v), b.max(v)));
+        assert!(hi > 3.0 * lo, "{lo} {hi}");
+    }
+
+    #[test]
+    fn eq_bands_boost_and_cut_where_they_should() {
+        let gain_at = |hz: f32, eq: EqParams| {
+            let p = EffectsParams { eq, ..Default::default() };
+            let (mut fx, p) = settled(p);
+            let x = sine(hz, 48_000, 0.1);
+            let (l, _) = run(&mut fx, &p, &x);
+            20.0 * (rms(&l[24_000..]) / rms(&x[24_000..])).log10()
+        };
+        let flat = EqParams { on: true, ..Default::default() };
+        for hz in [60.0, 1000.0, 8000.0] {
+            assert!(gain_at(hz, flat).abs() < 0.1, "flat at {hz}");
+        }
+        let low = gain_at(60.0, EqParams { low: 12.0, ..flat });
+        let mid = gain_at(1000.0, EqParams { mid: 6.0, ..flat });
+        let high = gain_at(12_000.0, EqParams { high: -12.0, ..flat });
+        assert!((low - 12.0).abs() < 1.0 && (mid - 6.0).abs() < 0.5 && (high + 12.0).abs() < 1.0, "{low} {mid} {high}");
+        // A low boost leaves the highs alone.
+        assert!(gain_at(8000.0, EqParams { low: 12.0, ..flat }).abs() < 0.5);
     }
 
     #[test]

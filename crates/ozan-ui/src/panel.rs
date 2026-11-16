@@ -223,9 +223,35 @@ pub fn panel(ui: &mut egui::Ui, p: &mut Patch, bank: &WavetableBank, m: &Meters)
         }
         Tab::Effects => {
             let fx = &mut p.fx;
-            let w = widths(ui, &[190.0, 300.0, 310.0]);
+            // In the order of the chain.
+            let w = widths(ui, &[200.0, 264.0, 198.0, 300.0, 330.0, 198.0]);
             ui.horizontal_top(|ui| {
-                theme::section_box(ui, "chorus", s().chorus, Vec2::new(w[0], lower), |ui| {
+                theme::section_box(ui, "distortion", s().distortion, Vec2::new(w[0], lower), |ui| {
+                    let d = &mut fx.distortion;
+                    widgets::toggle(ui, &mut d.on, s().on);
+                    ui.add_space(4.0);
+                    knob::drive_mode_selector(ui, &mut d.mode);
+                    ui.add_space(4.0);
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 2.0;
+                        Knob::keyed("dist_drive", s().drive, &mut d.drive, 0.0, 1.0).default_value(0.4).format(percent).show(ui);
+                        Knob::keyed("dist_tone", s().tone, &mut d.tone, 500.0, 16_000.0).log().default_value(6000.0).format(hertz).show(ui);
+                        Knob::keyed("mix", s().mix, &mut d.mix, 0.0, 1.0).default_value(1.0).format(percent).show(ui);
+                    });
+                });
+                theme::section_box(ui, "phaser", s().phaser, Vec2::new(w[1], lower), |ui| {
+                    let ph = &mut fx.phaser;
+                    widgets::toggle(ui, &mut ph.on, s().on);
+                    ui.add_space(6.0);
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 2.0;
+                        Knob::keyed("rate", s().rate, &mut ph.rate, 0.05, 5.0).log().default_value(0.4).format(rate).show(ui);
+                        Knob::keyed("depth", s().depth, &mut ph.depth, 0.0, 1.0).default_value(0.7).format(percent).show(ui);
+                        Knob::keyed("feedback", s().feedback, &mut ph.feedback, 0.0, 0.9).default_value(0.5).format(percent).show(ui);
+                        Knob::keyed("mix", s().mix, &mut ph.mix, 0.0, 1.0).default_value(1.0).format(percent).show(ui);
+                    });
+                });
+                theme::section_box(ui, "chorus", s().chorus, Vec2::new(w[2], lower), |ui| {
                     widgets::toggle(ui, &mut fx.chorus.on, s().on);
                     ui.add_space(6.0);
                     ui.horizontal(|ui| {
@@ -236,7 +262,7 @@ pub fn panel(ui: &mut egui::Ui, p: &mut Patch, bank: &WavetableBank, m: &Meters)
                         Knob::keyed("mix", s().mix, &mut c.mix, 0.0, 1.0).default_value(0.7).format(percent).show(ui);
                     });
                 });
-                theme::section_box(ui, "delay", s().delay, Vec2::new(w[1], lower), |ui| {
+                theme::section_box(ui, "delay", s().delay, Vec2::new(w[3], lower), |ui| {
                     ui.horizontal(|ui| {
                         widgets::toggle(ui, &mut fx.delay.on, s().on);
                         ui.add_space(12.0);
@@ -258,7 +284,7 @@ pub fn panel(ui: &mut egui::Ui, p: &mut Patch, bank: &WavetableBank, m: &Meters)
                         Knob::keyed("mix", s().mix, &mut d.mix, 0.0, 1.0).default_value(0.3).format(percent).show(ui);
                     });
                 });
-                theme::section_box(ui, "reverb", s().reverb, Vec2::new(w[2], lower), |ui| {
+                theme::section_box(ui, "reverb", s().reverb, Vec2::new(w[4], lower), |ui| {
                     widgets::toggle(ui, &mut fx.reverb.on, s().on);
                     ui.add_space(6.0);
                     ui.horizontal(|ui| {
@@ -269,6 +295,17 @@ pub fn panel(ui: &mut egui::Ui, p: &mut Patch, bank: &WavetableBank, m: &Meters)
                         Knob::keyed("damping", s().damping, &mut r.damping, 0.0, 1.0).default_value(0.4).format(percent).show(ui);
                         Knob::keyed("predelay", s().predelay, &mut r.predelay_ms, 0.0, 100.0).default_value(10.0).format(millis).show(ui);
                         Knob::keyed("mix", s().mix, &mut r.mix, 0.0, 1.0).default_value(0.3).format(percent).show(ui);
+                    });
+                });
+                theme::section_box(ui, "eq", s().eq, Vec2::new(w[5], lower), |ui| {
+                    let e = &mut fx.eq;
+                    widgets::toggle(ui, &mut e.on, s().on);
+                    ui.add_space(6.0);
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 2.0;
+                        Knob::keyed("eq_low", s().eq_low, &mut e.low, -12.0, 12.0).bipolar().default_value(0.0).format(decibels).show(ui);
+                        Knob::keyed("eq_mid", s().eq_mid, &mut e.mid, -12.0, 12.0).bipolar().default_value(0.0).format(decibels).show(ui);
+                        Knob::keyed("eq_high", s().eq_high, &mut e.high, -12.0, 12.0).bipolar().default_value(0.0).format(decibels).show(ui);
                     });
                 });
             });
@@ -358,6 +395,10 @@ fn rate_or_length(ui: &mut egui::Ui, label: &str, hz: &mut f32, min: f32, max: f
 /// Switch locking a rate or time to the tempo.
 fn sync_switch(ui: &mut egui::Ui, on: &mut bool) {
     ui.horizontal(|ui| widgets::toggle(ui, on, s().sync)).response.on_hover_text(s().sync_hint);
+}
+
+fn decibels(v: f32) -> String {
+    format!("{v:+.1} dB")
 }
 
 fn percent(v: f32) -> String {

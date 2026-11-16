@@ -3,7 +3,7 @@
 use std::f32::consts::PI;
 
 use egui::{self, Color32, Pos2, Rect, Sense, Stroke, Vec2};
-use ozan_core::{ArpMode, FilterMode, FilterRouting, LfoWave, VoiceMode, Waveform};
+use ozan_core::{ArpMode, DriveMode, FilterMode, FilterRouting, LfoWave, VoiceMode, Waveform};
 
 use crate::i18n::{fill, s};
 use crate::learn;
@@ -392,6 +392,30 @@ pub fn routing_selector(ui: &mut egui::Ui, routing: &mut FilterRouting) -> bool 
             FilterRouting::Off => s().routing_off_hint,
             FilterRouting::Serial => s().routing_serial_hint,
             FilterRouting::Parallel => s().routing_parallel_hint,
+        },
+    )
+}
+
+pub fn drive_mode_selector(ui: &mut egui::Ui, mode: &mut DriveMode) -> bool {
+    fn label(m: DriveMode) -> &'static str {
+        match m {
+            DriveMode::Soft => s().drive_soft,
+            DriveMode::Hard => s().drive_hard,
+            DriveMode::Fold => s().drive_fold,
+        }
+    }
+    choice_row(
+        ui,
+        mode,
+        &DriveMode::ALL,
+        Vec2::new(62.0, 24.0),
+        |p, r, m, c| {
+            p.text(r.center(), egui::Align2::CENTER_CENTER, label(m), egui::FontId::proportional(13.0), c);
+        },
+        |m| match m {
+            DriveMode::Soft => s().drive_soft_hint,
+            DriveMode::Hard => s().drive_hard_hint,
+            DriveMode::Fold => s().drive_fold_hint,
         },
     )
 }

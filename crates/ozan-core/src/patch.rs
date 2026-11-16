@@ -364,12 +364,88 @@ impl Default for UnisonParams {
     }
 }
 
+
+/// How the distortion bends the signal.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum DriveMode {
+    /// Rounded, like a tube or tape (tanh).
+    #[default]
+    Soft,
+    /// Cut flat at full scale: buzzy.
+    Hard,
+    /// Folds back over itself past full scale: metallic, more so the harder it is driven.
+    Fold,
+}
+
+impl DriveMode {
+    pub const ALL: [DriveMode; 3] = [DriveMode::Soft, DriveMode::Hard, DriveMode::Fold];
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize), serde(default))]
+pub struct DistortionParams {
+    pub on: bool,
+    pub mode: DriveMode,
+    /// 0..1: up to 36 dB into the shaper (the level after it is evened out).
+    pub drive: f32,
+    /// Low-pass after the shaper, Hz (500..16000).
+    pub tone: f32,
+    /// 0..1.
+    pub mix: f32,
+}
+
+impl Default for DistortionParams {
+    fn default() -> Self {
+        Self { on: false, mode: DriveMode::Soft, drive: 0.4, tone: 6000.0, mix: 1.0 }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize), serde(default))]
+pub struct PhaserParams {
+    pub on: bool,
+    /// Sweep speed, Hz (0.05..5).
+    pub rate: f32,
+    /// Sweep width, 0..1 (up to ±2.5 octaves around 700 Hz).
+    pub depth: f32,
+    /// 0..0.9: deeper, ringing notches.
+    pub feedback: f32,
+    /// 0..1; full is half dry, half phased (the notches are deepest).
+    pub mix: f32,
+}
+
+impl Default for PhaserParams {
+    fn default() -> Self {
+        Self { on: false, rate: 0.4, depth: 0.7, feedback: 0.5, mix: 1.0 }
+    }
+}
+
+/// Three-band equaliser at the end of the chain.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize), serde(default))]
+pub struct EqParams {
+    pub on: bool,
+    /// Shelf below 250 Hz, dB (-12..12).
+    pub low: f32,
+    /// Bell around 1 kHz, dB (-12..12).
+    pub mid: f32,
+    /// Shelf above 4 kHz, dB (-12..12).
+    pub high: f32,
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize), serde(default))]
 pub struct EffectsParams {
     pub chorus: ChorusParams,
     pub delay: DelayParams,
     pub reverb: ReverbParams,
+    /// Before the chorus. Missing in older presets.
+    pub distortion: DistortionParams,
+    /// After the distortion.
+    pub phaser: PhaserParams,
+    /// Last in the chain.
+    pub eq: EqParams,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
