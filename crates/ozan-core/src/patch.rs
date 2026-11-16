@@ -394,6 +394,10 @@ pub struct Patch {
     pub arp: ArpParams,
     /// White noise level added to the oscillators, 0..1.
     pub noise: f32,
+    /// How far oscillator 2 bends oscillator 1's phase (FM), 0..1.
+    pub fm: f32,
+    /// Level of oscillator 1 × oscillator 2 (ring modulation) in the mix, 0..1.
+    pub ring: f32,
     pub unison: UnisonParams,
     pub mods: [ModSlot; SLOTS],
     pub fx: EffectsParams,
@@ -421,6 +425,8 @@ impl Default for Patch {
             play: PlayParams::default(),
             arp: ArpParams::default(),
             noise: 0.0,
+            fm: 0.0,
+            ring: 0.0,
             unison: UnisonParams::default(),
             mods: [ModSlot::default(); SLOTS],
             fx: EffectsParams::default(),

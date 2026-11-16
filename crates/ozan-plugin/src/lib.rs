@@ -27,6 +27,8 @@ pub struct Meters {
     lfo2: AtomicU32,
     wheel: AtomicU32,
     aftertouch: AtomicU32,
+    /// Sequencer step sounding, plus one (0 = none).
+    seq: AtomicU32,
     pub scope: ozan_ui::scope::ScopeTap,
 }
 
@@ -37,6 +39,11 @@ impl Meters {
 
     fn load(cell: &AtomicU32) -> f32 {
         f32::from_bits(cell.load(Ordering::Relaxed))
+    }
+
+    /// Sequencer step sounding now.
+    pub fn seq_step(&self) -> Option<usize> {
+        self.seq.load(Ordering::Relaxed).checked_sub(1).map(|s| s as usize)
     }
 
     /// Highest peak since the window last looked.
@@ -299,6 +306,7 @@ impl Plugin for OzanPlugin {
         Meters::store(&m.lfo2, engine.lfo2_value());
         Meters::store(&m.wheel, self.wheel);
         Meters::store(&m.aftertouch, self.aftertouch);
+        m.seq.store(engine.seq_position().map_or(0, |s| s as u32 + 1), Ordering::Relaxed);
         // Reverb and echo tails ring on after the last note.
         ProcessStatus::KeepAlive
     }

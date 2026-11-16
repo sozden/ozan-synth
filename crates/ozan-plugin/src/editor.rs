@@ -14,7 +14,7 @@ use ozan_ui::theme;
 
 use crate::{Meters, OzanParams};
 
-pub const WIDTH: u32 = 1700;
+pub const WIDTH: u32 = 1780;
 pub const HEIGHT: u32 = 880;
 
 /// Per-window state: needle ballistics, scope buffer, the preset bar.
@@ -47,7 +47,7 @@ pub fn create(params: Arc<OzanParams>, meters: Arc<Meters>, bank: Arc<WavetableB
             window.vu += (peak - window.vu) * 0.12;
 
             ozan_ui::wood_cheeks(ctx);
-            egui::TopBottomPanel::top("header").frame(ozan_ui::pad()).show(ctx, |ui| header(ui, &params, setter, window, Meters::load(&meters.voices) as u32));
+            egui::TopBottomPanel::top("header").frame(ozan_ui::pad()).show(ctx, |ui| header(ui, &params, setter, window, Meters::load(&meters.voices) as u32, &bank));
             if let Ok(patch) = params.patch.read().map(|p| *p) {
                 window.bar.dialogs(ctx, &patch);
             }
@@ -66,6 +66,7 @@ pub fn create(params: Arc<OzanParams>, meters: Arc<Meters>, bank: Arc<WavetableB
                         lfo2: Meters::load(&meters.lfo2),
                         wheel: Meters::load(&meters.wheel),
                         aftertouch: Meters::load(&meters.aftertouch),
+                        seq_step: meters.seq_step(),
                     };
                     ozan_ui::panel::panel(ui, &mut patch, &bank, &shown);
                     if patch != current {
@@ -86,7 +87,7 @@ fn set_preset(params: &OzanParams, setter: &ParamSetter, index: i32) {
     setter.end_set_parameter(&params.preset);
 }
 
-fn header(ui: &mut egui::Ui, params: &OzanParams, setter: &ParamSetter, window: &mut Window, voices: u32) {
+fn header(ui: &mut egui::Ui, params: &OzanParams, setter: &ParamSetter, window: &mut Window, voices: u32, bank: &Arc<WavetableBank>) {
     let th = theme::t();
     ui.horizontal(|ui| {
         ozan_ui::logo::lockup(ui, 22.0, th.text, th.accent, th.muted);
@@ -109,6 +110,11 @@ fn header(ui: &mut egui::Ui, params: &OzanParams, setter: &ParamSetter, window: 
             if i < window.bar.factory_count() {
                 set_preset(params, setter, i as i32);
                 window.seen_param = Some(i as i32);
+            }
+        }
+        if ozan_ui::dice::button(ui, &mut patch, bank) {
+            if let Ok(mut p) = params.patch.write() {
+                *p = patch;
             }
         }
         ui.add_space(24.0);

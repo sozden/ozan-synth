@@ -97,6 +97,25 @@ impl Oscillator {
         out
     }
 
+    /// Like [`Oscillator::next`], read `offset` cycles ahead of the phase (phase
+    /// modulation, heard as FM). The phase itself still moves at `freq`.
+    #[inline]
+    pub fn next_pm(&mut self, wave: Waveform, freq: f32, sample_rate: f32, offset: f32) -> f32 {
+        let saved = self.phase;
+        self.phase = wrap(saved + offset);
+        let out = self.next(wave, freq, sample_rate);
+        self.phase = wrap(saved + (freq / sample_rate).clamp(0.0, 0.5));
+        out
+    }
+
+    /// [`Oscillator::next_table`] read `offset` cycles ahead.
+    #[inline]
+    pub fn next_table_pm(&mut self, table: &Wavetable, position: f32, level: usize, dt: f32, offset: f32) -> f32 {
+        let out = table.sample(wrap(self.phase + offset), position, level);
+        self.phase = wrap(self.phase + dt);
+        out
+    }
+
     /// Next sample from a wavetable; `level` comes from [`Wavetable::level_for`].
     #[inline]
     pub fn next_table(&mut self, table: &Wavetable, position: f32, level: usize, dt: f32) -> f32 {

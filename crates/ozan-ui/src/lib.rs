@@ -1,6 +1,7 @@
 //! Interface of OZAN Synth shared by the standalone program and the plugin: theme,
 //! knobs and meters, logo, translations, settings and the sound panel.
 
+pub mod dice;
 pub mod i18n;
 pub mod knob;
 pub mod lcd;

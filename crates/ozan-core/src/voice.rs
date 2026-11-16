@@ -7,7 +7,7 @@ use crate::envelope::Adsr;
 use crate::filter::{DcBlock, Filter};
 use crate::modmatrix::{ModDest, ModSource};
 use crate::oscillator::{Oscillator, Waveform};
-use crate::patch::{FilterRouting, Patch, ENV_OCTAVES};
+use crate::patch::{FilterRouting, OscParams, Patch, ENV_OCTAVES};
 use crate::wavetable::{Wavetable, WavetableBank};
 
 /// Most copies per oscillator.
@@ -15,6 +15,10 @@ pub const MAX_UNISON: usize = 7;
 
 /// Cutoff range of the matrix at full amount, in octaves.
 const MATRIX_OCTAVES: f32 = 6.0;
+
+/// Phase shift of oscillator 1 at full FM, in cycles per unit of oscillator 2
+/// (a modulation index of 2π).
+const FM_DEPTH: f32 = 1.0;
 
 /// Modulation shared by all voices for one block.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -75,6 +79,17 @@ pub struct Voice {
 struct CopySetup {
     freq: f32,
     level: usize,
+}
+
+/// Next sample of one oscillator copy; `pm` shifts its phase (FM).
+#[inline]
+fn osc_sample(osc: &mut Oscillator, o: &OscParams, table: &Wavetable, pos: f32, c: CopySetup, sample_rate: f32, pm: Option<f32>) -> f32 {
+    match (o.wave == Waveform::Wavetable, pm) {
+        (true, None) => osc.next_table(table, pos, c.level, c.freq / sample_rate),
+        (true, Some(shift)) => osc.next_table_pm(table, pos, c.level, c.freq / sample_rate, shift),
+        (false, None) => osc.next(o.wave, c.freq, sample_rate),
+        (false, Some(shift)) => osc.next_pm(o.wave, c.freq, sample_rate, shift),
+    }
 }
 
 impl Voice {
@@ -264,6 +279,8 @@ impl Voice {
         let sens = patch.play.velocity.clamp(0.0, 1.0);
         let gain = (1.0 - sens + sens * self.velocity) * m.amp * (1.0 + at(ModDest::Volume)).clamp(0.0, 2.0);
         let noise = patch.noise.clamp(0.0, 1.0);
+        let fm = (patch.fm + at(ModDest::Fm)).clamp(0.0, 1.0);
+        let ring = patch.ring.clamp(0.0, 1.0);
 
         let (start_pos, start_gain) = self.ramp_from.unwrap_or((positions, gain));
         self.ramp_from = Some((positions, gain));
@@ -276,18 +293,19 @@ impl Voice {
             let (mut l, mut r) = (0.0, 0.0);
             for i in 0..n {
                 let mut x = 0.0;
-                for k in 0..2 {
-                    if levels[k] <= 0.0 {
-                        continue;
+                if fm <= 0.0 && ring <= 0.0 {
+                    for k in 0..2 {
+                        if levels[k] <= 0.0 {
+                            continue;
+                        }
+                        x += osc_sample(&mut self.osc[k][i], &patch.osc[k], tables[k], pos[k], copies[k][i], sample_rate, None) * levels[k];
                     }
-                    let o = &patch.osc[k];
-                    let c = copies[k][i];
-                    let v = if o.wave == Waveform::Wavetable {
-                        self.osc[k][i].next_table(tables[k], pos[k], c.level, c.freq / sample_rate)
-                    } else {
-                        self.osc[k][i].next(o.wave, c.freq, sample_rate)
-                    };
-                    x += v * levels[k];
+                } else {
+                    // Oscillator 2 runs even when silent: it bends oscillator 1's
+                    // phase and multiplies with it.
+                    let v2 = osc_sample(&mut self.osc[1][i], &patch.osc[1], tables[1], pos[1], copies[1][i], sample_rate, None);
+                    let v1 = osc_sample(&mut self.osc[0][i], &patch.osc[0], tables[0], pos[0], copies[0][i], sample_rate, Some(fm * FM_DEPTH * v2));
+                    x = v1 * levels[0] + v2 * levels[1] + ring * v1 * v2;
                 }
                 l += x * gl[i];
                 r += x * gr[i];

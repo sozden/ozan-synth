@@ -357,6 +357,12 @@ impl Engine {
         }
     }
 
+    /// Sequencer step played last, while the sequencer runs.
+    pub fn seq_position(&self) -> Option<usize> {
+        let a = &self.patch.arp;
+        if a.on && a.mode == crate::ArpMode::Sequence { self.arp.position() } else { None }
+    }
+
     /// Tempo in beats per minute: the host's, or the arpeggiator's own setting.
     pub fn tempo(&self) -> f32 {
         self.host_bpm.unwrap_or(self.patch.arp.bpm).clamp(20.0, 400.0)
@@ -643,6 +649,38 @@ mod modulation_tests {
         let at = from + l[from..].iter().enumerate().max_by(|a, b| a.1.abs().total_cmp(&b.1.abs())).unwrap().0;
         let t = at as f32 / SR;
         assert!((0.39..0.44).contains(&t), "{t}");
+    }
+
+    #[test]
+    fn fm_and_ring_change_the_sound() {
+        use crate::{OscParams, Waveform};
+        let render = |level1: f32, fm: f32, ring: f32| {
+            let sine = OscParams { wave: Waveform::Sine, ..OscParams::default() };
+            let p = Patch {
+                osc: [OscParams { level: level1, ..sine }, OscParams { octave: 1, level: 0.0, ..sine }],
+                filter: crate::FilterParams { cutoff: 20_000.0, env_amount: 0.0, ..Patch::default().filter },
+                fm,
+                ring,
+                ..Patch::default()
+            };
+            let mut e = Engine::new(SR);
+            e.handle(Event::Patch(p));
+            e.handle(Event::NoteOn { note: 57, velocity: 100 });
+            let mut out = vec![0.0f32; 9_600];
+            e.render(&mut out);
+            out.split_off(4_800)
+        };
+        // Movement per sample grows with the harmonics FM adds.
+        let busy = |x: &[f32]| x.windows(2).map(|w| (w[1] - w[0]).abs()).sum::<f32>();
+        let plain = render(0.8, 0.0, 0.0);
+        let fm = render(0.8, 0.5, 0.0);
+        assert!(busy(&fm) > 1.5 * busy(&plain), "{} vs {}", busy(&fm), busy(&plain));
+        assert!(fm.iter().all(|v| v.is_finite() && v.abs() < 1.0));
+        // Ring alone: both oscillators silent, their product still sounds.
+        let silent = render(0.0, 0.0, 0.0);
+        let ring = render(0.0, 0.0, 1.0);
+        let rms = |x: &[f32]| (x.iter().map(|v| v * v).sum::<f32>() / x.len() as f32).sqrt();
+        assert!(rms(&silent) < 1e-6 && rms(&ring) > 0.02, "{} {}", rms(&silent), rms(&ring));
     }
 
     #[test]

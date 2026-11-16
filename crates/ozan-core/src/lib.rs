@@ -15,10 +15,11 @@ pub mod modmatrix;
 pub mod oscillator;
 pub mod patch;
 pub mod presets;
+pub mod random;
 pub mod voice;
 pub mod wavetable;
 
-pub use arp::{ArpDivision, ArpMode, ArpParams};
+pub use arp::{ArpDivision, ArpMode, ArpParams, SeqStep, SEQ_STEPS};
 pub use engine::{Engine, Event, MAX_VOICES};
 pub use filter::FilterMode;
 pub use lfo::LfoWave;

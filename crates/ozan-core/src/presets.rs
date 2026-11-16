@@ -81,7 +81,7 @@ fn play(mode: VoiceMode, glide: f32, velocity: f32) -> PlayParams {
 }
 
 fn arp(mode: ArpMode, division: ArpDivision, octaves: u8, gate: f32, bpm: f32) -> ArpParams {
-    ArpParams { on: true, mode, division, octaves, gate, hold: false, bpm }
+    ArpParams { on: true, mode, division, octaves, gate, hold: false, bpm, ..ArpParams::default() }
 }
 
 /// Built-in presets, in the order they appear in the list.

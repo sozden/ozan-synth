@@ -404,6 +404,7 @@ pub fn arp_mode_selector(ui: &mut egui::Ui, mode: &mut ArpMode) -> bool {
             ArpMode::UpDown => s().arp_updown,
             ArpMode::Random => s().arp_random,
             ArpMode::Played => s().arp_played,
+            ArpMode::Sequence => s().arp_seq,
         }
     }
     choice_row(
@@ -420,6 +421,7 @@ pub fn arp_mode_selector(ui: &mut egui::Ui, mode: &mut ArpMode) -> bool {
             ArpMode::UpDown => s().arp_updown_hint,
             ArpMode::Random => s().arp_random_hint,
             ArpMode::Played => s().arp_played_hint,
+            ArpMode::Sequence => s().arp_seq_hint,
         },
     )
 }

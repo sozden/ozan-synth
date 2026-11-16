@@ -212,6 +212,7 @@ impl OzanApp {
             if let Some(i) = self.bar.bar(ui, &mut self.patch) {
                 self.preset_loaded(i);
             }
+            ozan_ui::dice::button(ui, &mut self.patch, &self.bank);
             bar_right = ui.min_rect().right();
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| match &self.audio {
                 Ok(a) => {
@@ -377,6 +378,7 @@ impl eframe::App for OzanApp {
                     lfo2: self.status.lfo2(),
                     wheel: self.status.wheel(),
                     aftertouch: self.status.aftertouch(),
+                    seq_step: self.status.seq_step(),
                 };
                 if let Some(rx) = &mut self.controllers {
                     while let Ok((cc, value)) = rx.pop() {

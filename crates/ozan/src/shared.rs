@@ -39,6 +39,8 @@ pub struct Status {
     aftertouch: AtomicU32,
     lfo: AtomicU32,
     lfo2: AtomicU32,
+    /// Sequencer step sounding, plus one (0 = none).
+    seq: AtomicU32,
     /// Program change waiting for the interface, plus one (0 = none).
     program: AtomicU32,
     /// Output samples for the scope.
@@ -46,7 +48,8 @@ pub struct Status {
 }
 
 impl Status {
-    pub fn report_audio(&self, voices: usize, peak: f32, held: u128, lfo: [f32; 2]) {
+    pub fn report_audio(&self, voices: usize, peak: f32, held: u128, lfo: [f32; 2], seq: Option<usize>) {
+        self.seq.store(seq.map_or(0, |s| s as u32 + 1), Ordering::Relaxed);
         self.lfo.store(lfo[0].to_bits(), Ordering::Relaxed);
         self.lfo2.store(lfo[1].to_bits(), Ordering::Relaxed);
         self.voices.store(voices as u32, Ordering::Relaxed);
@@ -102,6 +105,10 @@ impl Status {
 
     pub fn lfo(&self) -> f32 {
         f32::from_bits(self.lfo.load(Ordering::Relaxed))
+    }
+
+    pub fn seq_step(&self) -> Option<usize> {
+        self.seq.load(Ordering::Relaxed).checked_sub(1).map(|s| s as usize)
     }
 
     pub fn lfo2(&self) -> f32 {

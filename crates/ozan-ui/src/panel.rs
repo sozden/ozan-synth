@@ -3,7 +3,7 @@
 
 use egui::{self, RichText, Vec2};
 use ozan_core::wavetable::WavetableBank;
-use ozan_core::{AdsrParams, ArpDivision, ArpParams, ModDest, ModSource, NoteLength, OscParams, Patch, Waveform, WavetableKind};
+use ozan_core::{AdsrParams, ArpDivision, ArpMode, ArpParams, ModDest, ModSource, NoteLength, OscParams, Patch, SeqStep, Waveform, WavetableKind, SEQ_STEPS};
 
 use crate::i18n::{self, s};
 use crate::knob::{self, Knob};
@@ -25,6 +25,8 @@ pub struct Meters<'a> {
     /// Latest output samples, oldest first, for the scope.
     pub scope: &'a [f32],
     pub sample_rate: f32,
+    /// Sequencer step sounding now.
+    pub seq_step: Option<usize>,
 }
 
 /// Which group the tabbed lower part shows.
@@ -93,7 +95,7 @@ pub fn panel(ui: &mut egui::Ui, p: &mut Patch, bank: &WavetableBank, m: &Meters)
     let osc_width = |knobs: usize, wt: bool| (66.0 * (knobs + wt as usize) as f32).max(200.0);
     let osc1 = osc_width(3, p.osc[0].wave == Waveform::Wavetable);
     let osc2 = osc_width(4, p.osc[1].wave == Waveform::Wavetable);
-    let w = widths(ui, &[osc1, osc2, 264.0, 330.0, 240.0]);
+    let w = widths(ui, &[osc1, osc2, 396.0, 330.0, 214.0]);
     ui.horizontal_top(|ui| {
         for (i, osc) in p.osc.iter_mut().enumerate() {
             let (key, title) = if i == 0 { ("osc1", s().osc1) } else { ("osc2", s().osc2) };
@@ -112,6 +114,9 @@ pub fn panel(ui: &mut egui::Ui, p: &mut Patch, bank: &WavetableBank, m: &Meters)
                 }
                 Knob::keyed("detune", s().detune, &mut u.detune, 0.0, 100.0).default_value(20.0).format(cents_plain).show(ui);
                 Knob::keyed("spread", s().spread, &mut u.spread, 0.0, 1.0).default_value(0.6).format(percent).show(ui);
+                // Oscillator 2 bending (FM) and multiplying (ring) oscillator 1.
+                Knob::keyed("fm", s().fm, &mut p.fm, 0.0, 1.0).default_value(0.0).format(percent).show(ui);
+                Knob::keyed("ring", s().ring, &mut p.ring, 0.0, 1.0).default_value(0.0).format(percent).show(ui);
             });
         });
         theme::section_box(ui, "filter", s().filter, Vec2::new(w[3], top), |ui| {
@@ -175,7 +180,7 @@ pub fn panel(ui: &mut egui::Ui, p: &mut Patch, bank: &WavetableBank, m: &Meters)
     let lower = row(LOWER).max(left);
     match tab {
         Tab::Modulation => {
-            let w = widths(ui, &[264.0, 230.0, 390.0, 640.0]);
+            let w = widths(ui, &[264.0, 230.0, 390.0, 666.0]);
             ui.horizontal_top(|ui| {
                 theme::section_box(ui, "lfo", s().lfo, Vec2::new(w[0], lower), |ui| {
                     ui.horizontal(|ui| {
@@ -269,7 +274,7 @@ pub fn panel(ui: &mut egui::Ui, p: &mut Patch, bank: &WavetableBank, m: &Meters)
             });
         }
         Tab::Play => {
-            let w = widths(ui, &[150.0, 250.0, 330.0]);
+            let w = widths(ui, &[150.0, 250.0, 370.0, 600.0]);
             ui.horizontal_top(|ui| {
                 theme::section_box(ui, "play", s().play, Vec2::new(w[0], lower), |ui| {
                     knob::voice_mode_selector(ui, &mut p.play.mode);
@@ -295,6 +300,7 @@ pub fn panel(ui: &mut egui::Ui, p: &mut Patch, bank: &WavetableBank, m: &Meters)
                     });
                 });
                 theme::section_box(ui, "arp", s().arp, Vec2::new(w[2], lower), |ui| arpeggiator(ui, &mut p.arp));
+                theme::section_box(ui, "sequencer", s().sequencer, Vec2::new(w[3], lower), |ui| sequencer(ui, &mut p.arp, m.seq_step));
             });
         }
     }
@@ -429,7 +435,7 @@ pub fn oscillator(ui: &mut egui::Ui, osc: &mut OscParams, semitones: bool, bank:
 }
 
 /// Destinations in the order of the pin matrix columns, with their short codes.
-const DESTS: [(ModDest, &str); 14] = [
+const DESTS: [(ModDest, &str); 15] = [
     (ModDest::Pitch, "PIT"),
     (ModDest::Osc1Pitch, "P1"),
     (ModDest::Osc2Pitch, "P2"),
@@ -437,6 +443,7 @@ const DESTS: [(ModDest, &str); 14] = [
     (ModDest::Osc2Level, "L2"),
     (ModDest::Osc1Position, "W1"),
     (ModDest::Osc2Position, "W2"),
+    (ModDest::Fm, "FM"),
     (ModDest::UnisonDetune, "DET"),
     (ModDest::Cutoff, "CUT"),
     (ModDest::Resonance, "RES"),
@@ -660,6 +667,152 @@ pub fn arpeggiator(ui: &mut egui::Ui, a: &mut ArpParams) {
         Knob::keyed("gate", s().gate, &mut a.gate, 0.05, 1.0).default_value(0.5).format(percent).show(ui);
         Knob::keyed("tempo", s().tempo, &mut a.bpm, 40.0, 240.0).default_value(120.0).format(bpm).show(ui);
     });
+}
+
+/// Left column of the sequencer, with the row names.
+const SEQ_GUTTER: f32 = 58.0;
+const SEQ_NUMBERS: f32 = 20.0;
+const SEQ_SWITCH: f32 = 22.0;
+
+/// The step sequencer: a column per step with its note (drag it up or down, the
+/// mouse wheel, double-click for the key itself) and switches to play, accent and
+/// tie it. A click on a step number ends the pattern there. `playing` is the step
+/// sounding now.
+pub fn sequencer(ui: &mut egui::Ui, a: &mut ArpParams, playing: Option<usize>) {
+    let th = theme::t();
+    ui.horizontal(|ui| {
+        let mut on = a.on && a.mode == ArpMode::Sequence;
+        if widgets::toggle(ui, &mut on, s().on) {
+            a.on = on;
+            if on {
+                a.mode = ArpMode::Sequence;
+            }
+        }
+        ui.add_space(14.0);
+        ui.label(RichText::new(i18n::fill(s().seq_length, &[&a.length.clamp(1, SEQ_STEPS as u8)])).monospace().color(th.muted));
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if ui.button(s().seq_clear).on_hover_text(s().seq_clear_hint).clicked() {
+                a.steps = [SeqStep::default(); SEQ_STEPS];
+                a.length = SEQ_STEPS as u8;
+            }
+            if ui.button(s().seq_random).on_hover_text(s().seq_random_hint).clicked() {
+                a.steps = ozan_core::random::steps(crate::dice::seed());
+            }
+        });
+    });
+    ui.add_space(4.0);
+
+    let cols = SEQ_STEPS as f32;
+    let col = ((ui.available_width() - SEQ_GUTTER) / cols).floor().max(18.0);
+    let bar_h = (ui.available_height() - SEQ_NUMBERS - 3.0 * SEQ_SWITCH - 30.0).clamp(64.0, 150.0);
+    let size = Vec2::new(SEQ_GUTTER + col * cols, SEQ_NUMBERS + 4.0 + bar_h + 6.0 + 3.0 * SEQ_SWITCH);
+    let (rect, response) = ui.allocate_exact_size(size, egui::Sense::click_and_drag());
+    let id = response.id;
+    let left = rect.left() + SEQ_GUTTER;
+    let numbers = egui::Rect::from_min_size(egui::pos2(left, rect.top()), Vec2::new(col * cols, SEQ_NUMBERS));
+    let bars = egui::Rect::from_min_size(egui::pos2(left, numbers.bottom() + 4.0), Vec2::new(col * cols, bar_h));
+    let switches = egui::Rect::from_min_size(egui::pos2(left, bars.bottom() + 6.0), Vec2::new(col * cols, 3.0 * SEQ_SWITCH));
+    let column = |x: f32| -> Option<usize> {
+        let c = ((x - left) / col).floor();
+        (c >= 0.0 && c < cols).then_some(c as usize)
+    };
+    let length = a.length.clamp(1, SEQ_STEPS as u8) as usize;
+    // ±24 semitones fill the bar; the key itself is the middle line.
+    let mid = bars.center().y;
+    let per_semitone = (bar_h / 2.0 - 4.0) / 24.0;
+    let time = ui.input(|i| i.time);
+    let show_note = |c: usize, note: i8| crate::lcd::touch(&format!("{} {}", s().seq_note, c + 1), format!("{note:+}"), 0.5 + note as f32 / 48.0, true, time);
+
+    // Input.
+    if let Some(p) = response.interact_pointer_pos() {
+        if let Some(c) = column(p.x) {
+            if response.clicked() {
+                if numbers.contains(p) {
+                    a.length = (c + 1) as u8;
+                } else if switches.contains(p) {
+                    let step = &mut a.steps[c];
+                    match ((p.y - switches.top()) / SEQ_SWITCH) as usize {
+                        0 => step.on = !step.on,
+                        1 => step.accent = !step.accent,
+                        _ => step.tie = !step.tie,
+                    }
+                }
+            }
+            if response.double_clicked() && bars.contains(p) {
+                a.steps[c].note = 0;
+                show_note(c, 0);
+            }
+            if response.drag_started() && bars.contains(p) {
+                ui.data_mut(|d| d.insert_temp(id, (c, a.steps[c].note as f32)));
+            }
+        }
+    }
+    if response.dragged() {
+        if let Some((c, v)) = ui.data(|d| d.get_temp::<(usize, f32)>(id)) {
+            let fine = ui.input(|i| i.modifiers.shift);
+            let v = (v - response.drag_delta().y / if fine { 16.0 } else { 6.0 }).clamp(-24.0, 24.0);
+            ui.data_mut(|d| d.insert_temp(id, (c, v)));
+            a.steps[c].note = v.round() as i8;
+            show_note(c, a.steps[c].note);
+        }
+    } else {
+        ui.data_mut(|d| d.remove::<(usize, f32)>(id));
+    }
+    if let Some(h) = response.hover_pos().filter(|h| bars.contains(*h)) {
+        let scroll = ui.input(|i| i.raw_scroll_delta.y);
+        if let (Some(c), true) = (column(h.x), scroll != 0.0) {
+            let n = &mut a.steps[c].note;
+            *n = (*n + scroll.signum() as i8).clamp(-24, 24);
+            show_note(c, *n);
+        }
+    }
+
+    // Drawing.
+    let painter = ui.painter_at(rect.expand(2.0));
+    let label = |y: f32, text: &str| {
+        painter.text(egui::pos2(rect.left(), y), egui::Align2::LEFT_CENTER, text, egui::FontId::proportional(13.0), th.muted);
+    };
+    label(bars.center().y, s().seq_note);
+    for (k, text) in [s().seq_on, s().seq_accent, s().seq_tie].into_iter().enumerate() {
+        label(switches.top() + (k as f32 + 0.5) * SEQ_SWITCH, text);
+    }
+    painter.rect_filled(bars, 4.0, th.screen);
+    for c in 0..SEQ_STEPS {
+        let step = a.steps[c];
+        let x0 = left + c as f32 * col;
+        let cx = x0 + col / 2.0;
+        let inside = c < length;
+        let fade = |color: egui::Color32| if inside { color } else { color.gamma_multiply(0.3) };
+        // Step numbers, in groups of four; the sounding step lights up.
+        let num = egui::Rect::from_min_size(egui::pos2(x0 + 1.0, numbers.top()), Vec2::new(col - 2.0, SEQ_NUMBERS));
+        let now = playing == Some(c);
+        let fill = if now { th.accent } else if (c / 4) % 2 == 0 { th.knob } else { th.knob_hover };
+        painter.rect_filled(num, 3.0, fade(fill));
+        painter.text(num.center(), egui::Align2::CENTER_CENTER, format!("{}", c + 1), egui::FontId::monospace(12.0), if now { th.bg } else { fade(th.text) });
+        if now {
+            painter.rect_filled(egui::Rect::from_x_y_ranges(x0..=x0 + col, bars.y_range()), 0.0, egui::Color32::from_white_alpha(10));
+        }
+        // The note as a bar from the middle line.
+        let y = mid - step.note as f32 * per_semitone;
+        let bar = egui::Rect::from_x_y_ranges(x0 + 4.0..=x0 + col - 4.0, y.min(mid - 1.5)..=y.max(mid + 1.5));
+        let ink = if step.on { th.accent } else { th.muted.gamma_multiply(0.5) };
+        painter.rect_filled(bar, 2.0, fade(ink));
+        painter.text(egui::pos2(cx, bars.top() + 9.0), egui::Align2::CENTER_CENTER, if step.note == 0 { "0".to_string() } else { format!("{:+}", step.note) }, egui::FontId::monospace(11.5), fade(if step.on { th.text } else { th.muted }));
+        // Play, accent and tie.
+        let row = |k: usize| switches.top() + (k as f32 + 0.5) * SEQ_SWITCH;
+        painter.circle_filled(egui::pos2(cx, row(0)), 5.5, fade(if step.on { th.accent } else { th.track }));
+        let square = egui::Rect::from_center_size(egui::pos2(cx, row(1)), Vec2::splat(10.0));
+        painter.rect_filled(square, 2.0, fade(if step.accent { th.warm } else { th.track }));
+        if step.tie {
+            let end = if c + 1 < SEQ_STEPS { cx + col } else { x0 + col };
+            painter.line_segment([egui::pos2(cx, row(2)), egui::pos2(end, row(2))], egui::Stroke::new(4.0, fade(th.accent)));
+            painter.circle_filled(egui::pos2(cx, row(2)), 3.5, fade(th.accent));
+        } else {
+            painter.line_segment([egui::pos2(cx - 5.0, row(2)), egui::pos2(cx + 5.0, row(2))], egui::Stroke::new(3.0, fade(th.track)));
+        }
+    }
+    painter.line_segment([egui::pos2(bars.left() + 2.0, mid), egui::pos2(bars.right() - 2.0, mid)], egui::Stroke::new(1.0, th.track));
+    ui.label(RichText::new(s().seq_hint).size(12.5).color(th.muted));
 }
 
 fn bpm(v: f32) -> String {
