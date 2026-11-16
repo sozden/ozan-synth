@@ -26,6 +26,7 @@ pub use modmatrix::{ModDest, ModSlot, ModSource};
 pub use wavetable::WavetableKind;
 pub use oscillator::Waveform;
 pub use patch::{
+    Filter2Params, FilterRouting, NoteLength,
     ChorusParams, DelayParams, EffectsParams, FilterParams, LfoParams, OscParams, Patch, PlayParams, ReverbParams, UnisonParams, VoiceMode,
     WheelParams,
 };

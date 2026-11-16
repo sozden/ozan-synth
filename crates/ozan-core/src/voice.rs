@@ -7,7 +7,7 @@ use crate::envelope::Adsr;
 use crate::filter::{DcBlock, Filter};
 use crate::modmatrix::{ModDest, ModSource};
 use crate::oscillator::{Oscillator, Waveform};
-use crate::patch::{Patch, ENV_OCTAVES};
+use crate::patch::{FilterRouting, Patch, ENV_OCTAVES};
 use crate::wavetable::{Wavetable, WavetableBank};
 
 /// Most copies per oscillator.
@@ -57,6 +57,8 @@ pub struct Voice {
     osc: [[Oscillator; MAX_UNISON]; 2],
     /// Left and right; the right one runs only when the voice is not mono.
     filter: [Filter; 2],
+    /// The second filter, left and right.
+    filter2: [Filter; 2],
     /// After the drive, left and right.
     dc: [DcBlock; 2],
     filter_env: Adsr,
@@ -121,7 +123,7 @@ impl Voice {
             self.amp_env.kill();
             self.filter_env.kill();
             self.mod_env.kill();
-            for f in &mut self.filter {
+            for f in self.filter.iter_mut().chain(self.filter2.iter_mut()) {
                 f.reset();
             }
             self.dc = Default::default();
@@ -185,8 +187,8 @@ impl Voice {
         d
     }
 
-    /// Adds this voice's output to `left` and `right`. `cutoff` is the (smoothed)
-    /// base cutoff in Hz.
+    /// Adds this voice's output to `left` and `right`. `cutoff` holds the (smoothed)
+    /// base cutoffs of both filters in Hz.
     #[allow(clippy::too_many_arguments)]
     pub fn render_add(
         &mut self,
@@ -194,7 +196,7 @@ impl Voice {
         right: &mut [f32],
         patch: &Patch,
         m: &Modulation,
-        cutoff: f32,
+        cutoff: [f32; 2],
         sample_rate: f32,
         bank: &WavetableBank,
     ) {
@@ -252,8 +254,13 @@ impl Voice {
         let f = &patch.filter;
         let resonance = (f.resonance + at(ModDest::Resonance)).clamp(0.0, 1.0);
         let drive = (f.drive + at(ModDest::Drive)).clamp(0.0, 1.0);
-        let tracked = cutoff * (f.key_track * (self.note as f32 - 60.0) / 12.0 + m.cutoff_octaves + at(ModDest::Cutoff) * MATRIX_OCTAVES).exp2();
+        let tracked = cutoff[0] * (f.key_track * (self.note as f32 - 60.0) / 12.0 + m.cutoff_octaves + at(ModDest::Cutoff) * MATRIX_OCTAVES).exp2();
         let amount = f.env_amount * ENV_OCTAVES;
+        let f2 = &patch.filter2;
+        let routing = f2.routing;
+        let tracked2 = cutoff[1] * (f2.key_track * (self.note as f32 - 60.0) / 12.0 + m.cutoff_octaves + at(ModDest::Cutoff2) * MATRIX_OCTAVES).exp2();
+        let amount2 = f2.env_amount * ENV_OCTAVES;
+        let resonance2 = f2.resonance.clamp(0.0, 1.0);
         let sens = patch.play.velocity.clamp(0.0, 1.0);
         let gain = (1.0 - sens + sens * self.velocity) * m.amp * (1.0 + at(ModDest::Volume)).clamp(0.0, 2.0);
         let noise = patch.noise.clamp(0.0, 1.0);
@@ -306,8 +313,21 @@ impl Voice {
                 l = self.dc[0].process(crate::filter::drive(l, drive), sample_rate);
                 r = if stereo { self.dc[1].process(crate::filter::drive(r, drive), sample_rate) } else { l };
             }
-            let yl = self.filter[0].process_with(l, f.mode, g, k);
-            let yr = if stereo { self.filter[1].process_with(r, f.mode, g, k) } else { yl };
+            let mut yl = self.filter[0].process_with(l, f.mode, g, k);
+            let mut yr = if stereo { self.filter[1].process_with(r, f.mode, g, k) } else { yl };
+            if routing != FilterRouting::Off {
+                let (g2, k2) = Filter::coefficients(tracked2 * (amount2 * fe).exp2(), resonance2, sample_rate);
+                // Serial filters the first filter's output; parallel the same input.
+                let (il, ir) = if routing == FilterRouting::Serial { (yl, yr) } else { (l, r) };
+                let zl = self.filter2[0].process_with(il, f2.mode, g2, k2);
+                let zr = if stereo { self.filter2[1].process_with(ir, f2.mode, g2, k2) } else { zl };
+                (yl, yr) = if routing == FilterRouting::Serial {
+                    (zl, zr)
+                } else {
+                    // About -3 dB each, so two filters passing the same band are not twice as loud.
+                    ((yl + zl) * std::f32::consts::FRAC_1_SQRT_2, (yr + zr) * std::f32::consts::FRAC_1_SQRT_2)
+                };
+            }
             let ae = self.amp_env.next(&patch.amp_env, sample_rate);
             // Squared envelope sounds more even to the ear than a linear one.
             let e = ae * ae * gain;

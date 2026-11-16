@@ -3,7 +3,7 @@
 
 use egui::{self, RichText, Vec2};
 use ozan_core::wavetable::WavetableBank;
-use ozan_core::{AdsrParams, ArpDivision, ArpParams, ModDest, ModSource, OscParams, Patch, Waveform, WavetableKind};
+use ozan_core::{AdsrParams, ArpDivision, ArpParams, ModDest, ModSource, NoteLength, OscParams, Patch, Waveform, WavetableKind};
 
 use crate::i18n::{self, s};
 use crate::knob::{self, Knob};
@@ -49,7 +49,7 @@ fn widths(ui: &egui::Ui, content: &[f32]) -> Vec<f32> {
 
 /// Content heights of the rows; every section in a row is as tall as the row.
 const TOP: f32 = 136.0;
-const MIDDLE: f32 = 126.0;
+const MIDDLE: f32 = 158.0;
 const LOWER: f32 = 206.0;
 
 /// Outer height of a row whose content is `content` tall.
@@ -140,12 +140,27 @@ pub fn panel(ui: &mut egui::Ui, p: &mut Patch, bank: &WavetableBank, m: &Meters)
         });
     });
 
-    let w = widths(ui, &[390.0, 390.0, 500.0]);
+    let w = widths(ui, &[390.0, 390.0, 280.0, 300.0]);
     ui.horizontal_top(|ui| {
         theme::section_box(ui, "filter_env", s().filter_env, Vec2::new(w[0], middle), |ui| envelope(ui, &mut p.filter_env));
         theme::section_box(ui, "amp_env", s().amp_env, Vec2::new(w[1], middle), |ui| envelope(ui, &mut p.amp_env));
-        theme::section_box(ui, "scope", s().scope, Vec2::new(w[2], middle), |ui| {
-            let size = Vec2::new(ui.available_width(), 92.0);
+        // The second filter: how it joins the first, its type and its knobs.
+        theme::section_box(ui, "filter2", s().filter2, Vec2::new(w[2], middle), |ui| {
+            let f = &mut p.filter2;
+            knob::routing_selector(ui, &mut f.routing);
+            knob::filter_mode_selector(ui, &mut f.mode);
+            ui.add_enabled_ui(f.routing != ozan_core::FilterRouting::Off, |ui| {
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = 2.0;
+                    Knob::keyed("cutoff", s().cutoff, &mut f.cutoff, 20.0, 20_000.0).log().default_value(200.0).format(hertz).show(ui);
+                    Knob::keyed("resonance", s().resonance, &mut f.resonance, 0.0, 1.0).default_value(0.1).format(percent).show(ui);
+                    Knob::keyed("env_amount", s().env_amount, &mut f.env_amount, -1.0, 1.0).bipolar().default_value(0.0).format(signed_percent).show(ui);
+                    Knob::keyed("key_track", s().key_track, &mut f.key_track, 0.0, 1.0).default_value(0.0).format(percent).show(ui);
+                });
+            });
+        });
+        theme::section_box(ui, "scope", s().scope, Vec2::new(w[3], middle), |ui| {
+            let size = Vec2::new(ui.available_width(), 104.0);
             crate::scope::section(ui, m.scope, m.sample_rate, size)
         });
     });
@@ -160,7 +175,7 @@ pub fn panel(ui: &mut egui::Ui, p: &mut Patch, bank: &WavetableBank, m: &Meters)
     let lower = row(LOWER).max(left);
     match tab {
         Tab::Modulation => {
-            let w = widths(ui, &[264.0, 230.0, 390.0, 614.0]);
+            let w = widths(ui, &[264.0, 230.0, 390.0, 640.0]);
             ui.horizontal_top(|ui| {
                 theme::section_box(ui, "lfo", s().lfo, Vec2::new(w[0], lower), |ui| {
                     ui.horizontal(|ui| {
@@ -172,11 +187,12 @@ pub fn panel(ui: &mut egui::Ui, p: &mut Patch, bank: &WavetableBank, m: &Meters)
                     ui.horizontal(|ui| {
                         ui.spacing_mut().item_spacing.x = 2.0;
                         let l = &mut p.lfo;
-                        Knob::keyed("rate", s().rate, &mut l.rate, 0.05, 20.0).log().default_value(5.0).format(rate).show(ui);
+                        rate_or_length(ui, s().rate, &mut l.rate, 0.05, 20.0, 5.0, l.sync, &mut l.division);
                         Knob::keyed("vibrato", s().vibrato, &mut l.pitch, 0.0, 12.0).default_value(0.0).format(semitones).show(ui);
                         Knob::keyed("filter_knob", s().filter_knob, &mut l.cutoff, -1.0, 1.0).bipolar().default_value(0.0).format(signed_percent).show(ui);
                         Knob::keyed("tremolo", s().tremolo, &mut l.amp, 0.0, 1.0).default_value(0.0).format(percent).show(ui);
                     });
+                    sync_switch(ui, &mut p.lfo.sync);
                 });
                 theme::section_box(ui, "lfo2", s().lfo2, Vec2::new(w[1], lower), |ui| {
                     ui.horizontal(|ui| {
@@ -186,10 +202,12 @@ pub fn panel(ui: &mut egui::Ui, p: &mut Patch, bank: &WavetableBank, m: &Meters)
                         widgets::led(ui, th.accent.gamma_multiply(0.12 + 0.88 * (0.5 + 0.5 * m.lfo2))).on_hover_text(s().lfo2_hint);
                     });
                     ui.horizontal(|ui| {
-                        Knob::keyed("rate", s().rate, &mut p.lfo2.rate, 0.02, 20.0).log().default_value(0.5).format(rate).show(ui);
+                        let l = &mut p.lfo2;
+                        rate_or_length(ui, s().rate, &mut l.rate, 0.02, 20.0, 0.5, l.sync, &mut l.division);
                         let size = Vec2::new(ui.available_width(), 80.0);
                         widgets::lcd_trace(ui, "lfo2_trace", m.lfo2, size);
                     });
+                    sync_switch(ui, &mut p.lfo2.sync);
                 });
                 theme::section_box(ui, "mod_env", s().mod_env, Vec2::new(w[2], lower), |ui| {
                     ui.add_space(32.0);
@@ -200,7 +218,7 @@ pub fn panel(ui: &mut egui::Ui, p: &mut Patch, bank: &WavetableBank, m: &Meters)
         }
         Tab::Effects => {
             let fx = &mut p.fx;
-            let w = widths(ui, &[190.0, 250.0, 310.0]);
+            let w = widths(ui, &[190.0, 300.0, 310.0]);
             ui.horizontal_top(|ui| {
                 theme::section_box(ui, "chorus", s().chorus, Vec2::new(w[0], lower), |ui| {
                     widgets::toggle(ui, &mut fx.chorus.on, s().on);
@@ -218,12 +236,18 @@ pub fn panel(ui: &mut egui::Ui, p: &mut Patch, bank: &WavetableBank, m: &Meters)
                         widgets::toggle(ui, &mut fx.delay.on, s().on);
                         ui.add_space(12.0);
                         widgets::toggle(ui, &mut fx.delay.ping_pong, s().ping_pong);
+                        ui.add_space(12.0);
+                        sync_switch(ui, &mut fx.delay.sync);
                     });
                     ui.add_space(6.0);
                     ui.horizontal(|ui| {
                         ui.spacing_mut().item_spacing.x = 2.0;
                         let d = &mut fx.delay;
-                        Knob::keyed("time", s().time, &mut d.time_ms, 20.0, 2000.0).log().default_value(375.0).format(millis).show(ui);
+                        if d.sync {
+                            length_knob(ui, s().time, &mut d.division);
+                        } else {
+                            Knob::keyed("time", s().time, &mut d.time_ms, 20.0, 2000.0).log().default_value(375.0).format(millis).show(ui);
+                        }
                         Knob::keyed("feedback", s().feedback, &mut d.feedback, 0.0, 0.95).default_value(0.35).format(percent).show(ui);
                         Knob::keyed("tone", s().tone, &mut d.tone, 500.0, 16_000.0).log().default_value(5000.0).format(hertz).show(ui);
                         Knob::keyed("mix", s().mix, &mut d.mix, 0.0, 1.0).default_value(0.3).format(percent).show(ui);
@@ -298,6 +322,36 @@ impl From<Tab> for TabId {
             Tab::Play => 2,
         })
     }
+}
+
+/// Label of a note length knob position.
+fn note_length(v: f32) -> String {
+    NoteLength::ALL[(v.max(0.0) as usize).min(NoteLength::ALL.len() - 1)].label().to_string()
+}
+
+/// A knob stepping through note lengths, longest at the left.
+fn length_knob(ui: &mut egui::Ui, label: &str, length: &mut NoteLength) {
+    let mut i = length.index() as f32;
+    let last = (NoteLength::ALL.len() - 1) as f32;
+    let default = NoteLength::Quarter.index() as f32;
+    if Knob::keyed("length", label, &mut i, 0.0, last).integer().default_value(default).format(note_length).show(ui) {
+        *length = NoteLength::ALL[i as usize];
+    }
+}
+
+/// A rate in Hz, or a note length when locked to the tempo.
+#[allow(clippy::too_many_arguments)]
+fn rate_or_length(ui: &mut egui::Ui, label: &str, hz: &mut f32, min: f32, max: f32, default: f32, sync: bool, length: &mut NoteLength) {
+    if sync {
+        length_knob(ui, label, length);
+    } else {
+        Knob::keyed("rate", label, hz, min, max).log().default_value(default).format(rate).show(ui);
+    }
+}
+
+/// Switch locking a rate or time to the tempo.
+fn sync_switch(ui: &mut egui::Ui, on: &mut bool) {
+    ui.horizontal(|ui| widgets::toggle(ui, on, s().sync)).response.on_hover_text(s().sync_hint);
 }
 
 fn percent(v: f32) -> String {
@@ -375,7 +429,7 @@ pub fn oscillator(ui: &mut egui::Ui, osc: &mut OscParams, semitones: bool, bank:
 }
 
 /// Destinations in the order of the pin matrix columns, with their short codes.
-const DESTS: [(ModDest, &str); 13] = [
+const DESTS: [(ModDest, &str); 14] = [
     (ModDest::Pitch, "PIT"),
     (ModDest::Osc1Pitch, "P1"),
     (ModDest::Osc2Pitch, "P2"),
@@ -386,6 +440,7 @@ const DESTS: [(ModDest, &str); 13] = [
     (ModDest::UnisonDetune, "DET"),
     (ModDest::Cutoff, "CUT"),
     (ModDest::Resonance, "RES"),
+    (ModDest::Cutoff2, "CT2"),
     (ModDest::Drive, "DRV"),
     (ModDest::Volume, "VOL"),
     (ModDest::Pan, "PAN"),

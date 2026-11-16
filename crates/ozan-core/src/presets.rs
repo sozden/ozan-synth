@@ -12,7 +12,7 @@ use crate::modmatrix::{ModDest, ModSlot, ModSource, SLOTS};
 use crate::oscillator::Waveform;
 use crate::wavetable::WavetableKind;
 use crate::patch::{
-    ChorusParams, DelayParams, EffectsParams, FilterParams, LfoParams, OscParams, Patch, PlayParams, ReverbParams, UnisonParams, VoiceMode,
+    ChorusParams, DelayParams, EffectsParams, Filter2Params, FilterParams, FilterRouting, LfoParams, NoteLength, OscParams, Patch, PlayParams, ReverbParams, UnisonParams, VoiceMode,
     WheelParams,
 };
 
@@ -44,7 +44,7 @@ fn adsr(attack: f32, decay: f32, sustain: f32, release: f32) -> AdsrParams {
 }
 
 fn lfo(wave: LfoWave, rate: f32, pitch: f32, cutoff: f32, amp: f32) -> LfoParams {
-    LfoParams { wave, rate, pitch, cutoff, amp }
+    LfoParams { wave, rate, pitch, cutoff, amp, ..LfoParams::default() }
 }
 
 fn chorus(rate: f32, depth: f32, mix: f32) -> Option<ChorusParams> {
@@ -52,7 +52,7 @@ fn chorus(rate: f32, depth: f32, mix: f32) -> Option<ChorusParams> {
 }
 
 fn delay(time_ms: f32, feedback: f32, tone: f32, ping_pong: bool, mix: f32) -> Option<DelayParams> {
-    Some(DelayParams { on: true, time_ms, feedback, tone, ping_pong, mix })
+    Some(DelayParams { on: true, time_ms, feedback, tone, ping_pong, mix, ..DelayParams::default() })
 }
 
 fn reverb(size: f32, decay: f32, damping: f32, predelay_ms: f32, mix: f32) -> Option<ReverbParams> {
@@ -726,6 +726,35 @@ pub fn factory() -> Vec<(&'static str, Patch)> {
                 lfo: lfo(LfoWave::Triangle, 2.0, 0.0, 0.0, 0.0),
                 mods: mods(&[ModSlot::new(ModSource::Lfo, ModDest::Osc1Position, 0.5)]),
                 volume: 0.73,
+                ..d
+            },
+        ),
+        (
+            "Tempo Wobble",
+            Patch {
+                osc: [osc(Saw, -1, 0, 0.0, 0.8), osc(Square, -1, 0, 8.0, 0.6)],
+                filter: filter(Lp24, 250.0, 0.55, 0.1, 0.3),
+                amp_env: adsr(0.005, 0.2, 1.0, 0.15),
+                // One sweep every eighth note, whatever the tempo.
+                lfo: LfoParams { sync: true, division: NoteLength::Eighth, ..lfo(LfoWave::Sine, 4.0, 0.0, 0.6, 0.0) },
+                fx: fx(None, Some(DelayParams { sync: true, division: NoteLength::EighthDotted, ..delay(375.0, 0.3, 3000.0, true, 0.18).unwrap() }), None),
+                volume: 0.49,
+                ..d
+            },
+        ),
+        (
+            "Band Sweep",
+            Patch {
+                osc: [osc(Saw, 0, 0, 0.0, 0.7), osc(Saw, 0, 0, 8.0, 0.7)],
+                unison: unison(3, 14.0, 0.7),
+                // A band: low-pass, then a high-pass that moves with the bar.
+                filter: filter(Lp24, 3500.0, 0.2, 0.0, 0.3),
+                filter2: Filter2Params { routing: FilterRouting::Serial, mode: HighPass, cutoff: 500.0, resonance: 0.45, env_amount: 0.0, key_track: 0.2 },
+                amp_env: adsr(0.3, 1.0, 0.9, 1.5),
+                lfo2: LfoParams { sync: true, division: NoteLength::Bar, ..lfo(LfoWave::Triangle, 0.5, 0.0, 0.0, 0.0) },
+                mods: mods(&[ModSlot::new(ModSource::Lfo2, ModDest::Cutoff2, 0.4)]),
+                fx: fx(chorus(0.4, 0.5, 0.5), None, reverb(0.7, 3.0, 0.4, 20.0, 0.35)),
+                volume: 1.0,
                 ..d
             },
         ),

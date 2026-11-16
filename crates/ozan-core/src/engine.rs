@@ -58,6 +58,8 @@ pub struct Engine {
     /// Smoothed volume and cutoff (log2 Hz), so turning a knob does not crackle.
     gain: f32,
     log_cutoff: f32,
+    /// The second filter's, the same way.
+    log_cutoff2: f32,
     /// Pitch bend -1..1.
     bend: f32,
     wheel: f32,
@@ -98,6 +100,7 @@ impl Engine {
             effects: Effects::new(sample_rate, &patch.fx),
             gain: patch.volume,
             log_cutoff: patch.filter.cutoff.log2(),
+            log_cutoff2: patch.filter2.cutoff.max(1.0).log2(),
             patch,
             bend: 0.0,
             wheel: 0.0,
@@ -319,13 +322,15 @@ impl Engine {
     /// Modulation for the next `samples`, from the LFO, wheel, aftertouch and bend.
     fn modulation(&mut self, samples: usize) -> Modulation {
         let p = &self.patch;
-        let raw = self.lfo.advance(p.lfo.wave, p.lfo.rate, samples as f32 / self.sample_rate);
+        let bpm = self.tempo();
+        let rate = |l: &crate::LfoParams| if l.sync { 1.0 / l.division.seconds(bpm) } else { l.rate };
+        let raw = self.lfo.advance(p.lfo.wave, rate(&p.lfo), samples as f32 / self.sample_rate);
         // A few milliseconds of slew: square and sample & hold steps would
         // otherwise jump the cutoff or level at once, which clicks.
         let k = 1.0 - (-(samples as f32) / (LFO_SLEW * self.sample_rate)).exp();
         self.lfo_value += (raw - self.lfo_value) * k;
         let lfo = self.lfo_value;
-        let raw2 = self.lfo2.advance(p.lfo2.wave, p.lfo2.rate, samples as f32 / self.sample_rate);
+        let raw2 = self.lfo2.advance(p.lfo2.wave, rate(&p.lfo2), samples as f32 / self.sample_rate);
         self.lfo2_value += (raw2 - self.lfo2_value) * k;
         let wheel = self.wheel.max(self.aftertouch);
         Modulation {
@@ -352,9 +357,14 @@ impl Engine {
         }
     }
 
+    /// Tempo in beats per minute: the host's, or the arpeggiator's own setting.
+    pub fn tempo(&self) -> f32 {
+        self.host_bpm.unwrap_or(self.patch.arp.bpm).clamp(20.0, 400.0)
+    }
+
     /// Length of one arpeggiator step in samples.
     fn arp_step(&self) -> f64 {
-        let bpm = self.host_bpm.unwrap_or(self.patch.arp.bpm).clamp(20.0, 400.0) as f64;
+        let bpm = self.tempo() as f64;
         self.sample_rate as f64 * 60.0 / bpm * self.patch.arp.division.beats()
     }
 
@@ -411,16 +421,22 @@ impl Engine {
         // About 10 ms smoothing.
         let k = 1.0 - (-(BLOCK as f32) / (0.01 * self.sample_rate)).exp();
         let target_cutoff = self.patch.filter.cutoff.max(1.0).log2();
+        let target_cutoff2 = self.patch.filter2.cutoff.max(1.0).log2();
         self.gain += (self.patch.volume - self.gain) * k;
         self.log_cutoff += (target_cutoff - self.log_cutoff) * k;
-        let cutoff = self.log_cutoff.exp2();
+        self.log_cutoff2 += (target_cutoff2 - self.log_cutoff2) * k;
+        let cutoff = [self.log_cutoff.exp2(), self.log_cutoff2.exp2()];
         let modulation = self.modulation(n);
         for v in &mut self.voices {
             v.render_add(dry_l, dry_r, &self.patch, &modulation, cutoff, self.sample_rate, &self.bank);
         }
         let gain = self.gain;
+        let mut fx = self.patch.fx;
+        if fx.delay.sync {
+            fx.delay.time_ms = (fx.delay.division.seconds(self.tempo()) * 1000.0).clamp(20.0, 2000.0);
+        }
         for i in 0..n {
-            let (l, r) = self.effects.process(dry_l[i] * VOICE_GAIN, dry_r[i] * VOICE_GAIN, &self.patch.fx);
+            let (l, r) = self.effects.process(dry_l[i] * VOICE_GAIN, dry_r[i] * VOICE_GAIN, &fx);
             // Gentle saturation instead of hard clipping on loud chords.
             left[i] = (l * gain).tanh();
             right[i] = (r * gain).tanh();
@@ -544,7 +560,7 @@ mod modulation_tests {
     fn square_lfo_vibrato_jumps_an_octave() {
         let mut e = Engine::new(SR);
         let mut p = sine_patch();
-        p.lfo = LfoParams { wave: LfoWave::Square, rate: 1.0, pitch: 12.0, cutoff: 0.0, amp: 0.0 };
+        p.lfo = LfoParams { wave: LfoWave::Square, rate: 1.0, pitch: 12.0, cutoff: 0.0, amp: 0.0, ..LfoParams::default() };
         e.handle(Event::Patch(p));
         e.handle(Event::NoteOn { note: 57, velocity: 100 }); // 220 Hz
         let mut buf = vec![0.0; SR as usize];
@@ -580,13 +596,74 @@ mod modulation_tests {
     #[test]
     fn stepped_lfo_does_not_jump_at_once() {
         let mut e = Engine::new(SR);
-        let p = Patch { lfo: LfoParams { wave: LfoWave::Square, rate: 2.0, pitch: 0.0, cutoff: 1.0, amp: 0.0 }, ..Patch::default() };
+        let p = Patch { lfo: LfoParams { wave: LfoWave::Square, rate: 2.0, pitch: 0.0, cutoff: 1.0, amp: 0.0, ..LfoParams::default() }, ..Patch::default() };
         e.handle(Event::Patch(p));
         let cut: Vec<f32> = (0..3000).map(|_| e.modulation(32).cutoff_octaves).collect();
         let biggest_step = cut.windows(2).map(|w| (w[1] - w[0]).abs()).fold(0.0f32, f32::max);
         // The full swing is 2 × 4 octaves; one 32-sample block may move only part of it.
         assert!(biggest_step < 0.2 * 2.0 * MOD_OCTAVES, "{biggest_step}");
         assert!(cut.iter().cloned().fold(f32::MIN, f32::max) > 0.99 * MOD_OCTAVES);
+    }
+
+    #[test]
+    fn synced_lfo_follows_the_tempo() {
+        let mut e = Engine::new(SR);
+        let mut p = Patch {
+            lfo: LfoParams { wave: LfoWave::Square, rate: 7.0, cutoff: 1.0, sync: true, division: crate::NoteLength::Eighth, ..LfoParams::default() },
+            ..Patch::default()
+        };
+        e.handle(Event::Patch(p));
+        e.handle(Event::Tempo(120.0));
+        // An eighth at 120 BPM is 0.25 s: 4 cycles a second, 8 sign changes.
+        let blocks = (SR as usize) / 32;
+        let cut: Vec<f32> = (0..blocks).map(|_| e.modulation(32).cutoff_octaves).collect();
+        let flips = cut.windows(2).filter(|w| (w[0] > 0.0) != (w[1] > 0.0)).count();
+        assert!((7..=9).contains(&flips), "{flips}");
+        // Without a host, the arpeggiator's tempo counts.
+        let mut e = Engine::new(SR);
+        p.arp.bpm = 60.0;
+        e.handle(Event::Patch(p));
+        let cut: Vec<f32> = (0..blocks).map(|_| e.modulation(32).cutoff_octaves).collect();
+        let flips = cut.windows(2).filter(|w| (w[0] > 0.0) != (w[1] > 0.0)).count();
+        assert!((3..=5).contains(&flips), "{flips}");
+    }
+
+    #[test]
+    fn synced_delay_repeats_on_the_beat() {
+        let mut e = Engine::new(SR);
+        let mut p = Patch { amp_env: crate::AdsrParams { attack: 0.001, decay: 0.02, sustain: 0.0, release: 0.01 }, ..Patch::default() };
+        p.filter.cutoff = 20_000.0;
+        p.fx.delay = crate::DelayParams { on: true, time_ms: 1000.0, feedback: 0.0, mix: 1.0, sync: true, division: crate::NoteLength::Quarter, ..Default::default() };
+        e.handle(Event::Patch(p));
+        e.handle(Event::Tempo(150.0));
+        e.handle(Event::NoteOn { note: 60, velocity: 127 });
+        let (l, _) = render_lr(&mut e, SR as usize);
+        // A quarter at 150 BPM is 0.4 s; the echo is the loudest thing after 0.2 s.
+        let from = (0.2 * SR) as usize;
+        let at = from + l[from..].iter().enumerate().max_by(|a, b| a.1.abs().total_cmp(&b.1.abs())).unwrap().0;
+        let t = at as f32 / SR;
+        assert!((0.39..0.44).contains(&t), "{t}");
+    }
+
+    #[test]
+    fn second_filter_routes() {
+        let level = |routing: crate::FilterRouting| {
+            let mut e = Engine::new(SR);
+            let p = Patch {
+                filter: crate::patch::FilterParams { mode: crate::FilterMode::Lp24, cutoff: 400.0, resonance: 0.0, env_amount: 0.0, key_track: 0.0, drive: 0.0 },
+                filter2: crate::Filter2Params { routing, mode: crate::FilterMode::HighPass, cutoff: 4000.0, resonance: 0.0, env_amount: 0.0, key_track: 0.0 },
+                ..Patch::default()
+            };
+            e.handle(Event::Patch(p));
+            e.handle(Event::NoteOn { note: 48, velocity: 127 });
+            let (l, _) = render_lr(&mut e, 24_000);
+            rms(&l[12_000..])
+        };
+        let (off, serial, parallel) = (level(crate::FilterRouting::Off), level(crate::FilterRouting::Serial), level(crate::FilterRouting::Parallel));
+        // Low-pass at 400 Hz then high-pass at 4 kHz leaves almost nothing; side by
+        // side the low-pass part stays, mixed in at -3 dB.
+        assert!(serial < off * 0.01, "{serial} vs {off}");
+        assert!((0.6..0.8).contains(&(parallel / off)), "{parallel} vs {off}");
     }
 
     fn render_lr(e: &mut Engine, n: usize) -> (Vec<f32>, Vec<f32>) {
@@ -660,7 +737,7 @@ mod modulation_tests {
         let mut e = Engine::new(SR);
         let mut p = sine_patch();
         p.osc[0].wave = Waveform::Wavetable; // basic table, position 0: a sine
-        p.lfo = LfoParams { wave: LfoWave::Square, rate: 1.0, pitch: 0.0, cutoff: 0.0, amp: 0.0 };
+        p.lfo = LfoParams { wave: LfoWave::Square, rate: 1.0, pitch: 0.0, cutoff: 0.0, amp: 0.0, ..LfoParams::default() };
         p.mods[0] = ModSlot::new(ModSource::Lfo, ModDest::Osc1Position, 1.0);
         e.handle(Event::Patch(p));
         e.handle(Event::NoteOn { note: 57, velocity: 100 });
@@ -852,3 +929,4 @@ mod modulation_tests {
         assert!(max <= 1.0 && max > 0.99 && (min - 0.6).abs() < 0.01, "{min}..{max}");
     }
 }
+

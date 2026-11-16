@@ -66,6 +66,144 @@ pub const ENV_OCTAVES: f32 = 7.0;
 /// Cutoff range of the LFO and the mod wheel at full amount, in octaves.
 pub const MOD_OCTAVES: f32 = 4.0;
 
+/// How the second filter joins the first.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum FilterRouting {
+    /// Only the first filter.
+    #[default]
+    Off,
+    /// The second filter after the first.
+    Serial,
+    /// Both filters on the same signal, their outputs added.
+    Parallel,
+}
+
+impl FilterRouting {
+    pub const ALL: [FilterRouting; 3] = [FilterRouting::Off, FilterRouting::Serial, FilterRouting::Parallel];
+}
+
+/// The second filter. It has no drive of its own (the drive sits before both) and
+/// follows the same filter envelope with its own amount.
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize), serde(default))]
+pub struct Filter2Params {
+    pub routing: FilterRouting,
+    pub mode: FilterMode,
+    /// Hz.
+    pub cutoff: f32,
+    /// 0..1.
+    pub resonance: f32,
+    /// -1..1 (±[`ENV_OCTAVES`]).
+    pub env_amount: f32,
+    /// 0..1.
+    pub key_track: f32,
+}
+
+impl Default for Filter2Params {
+    fn default() -> Self {
+        Self { routing: FilterRouting::Off, mode: FilterMode::HighPass, cutoff: 200.0, resonance: 0.1, env_amount: 0.0, key_track: 0.0 }
+    }
+}
+
+/// A note length for settings locked to the tempo.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum NoteLength {
+    FourBars,
+    TwoBars,
+    Bar,
+    HalfDotted,
+    Half,
+    QuarterDotted,
+    HalfTriplet,
+    #[default]
+    Quarter,
+    EighthDotted,
+    QuarterTriplet,
+    Eighth,
+    SixteenthDotted,
+    EighthTriplet,
+    Sixteenth,
+    SixteenthTriplet,
+    ThirtySecond,
+}
+
+impl NoteLength {
+    /// Longest first.
+    pub const ALL: [NoteLength; 16] = [
+        NoteLength::FourBars,
+        NoteLength::TwoBars,
+        NoteLength::Bar,
+        NoteLength::HalfDotted,
+        NoteLength::Half,
+        NoteLength::QuarterDotted,
+        NoteLength::HalfTriplet,
+        NoteLength::Quarter,
+        NoteLength::EighthDotted,
+        NoteLength::QuarterTriplet,
+        NoteLength::Eighth,
+        NoteLength::SixteenthDotted,
+        NoteLength::EighthTriplet,
+        NoteLength::Sixteenth,
+        NoteLength::SixteenthTriplet,
+        NoteLength::ThirtySecond,
+    ];
+
+    /// Length in beats (quarter notes), in 4/4.
+    pub fn beats(self) -> f32 {
+        match self {
+            NoteLength::FourBars => 16.0,
+            NoteLength::TwoBars => 8.0,
+            NoteLength::Bar => 4.0,
+            NoteLength::HalfDotted => 3.0,
+            NoteLength::Half => 2.0,
+            NoteLength::QuarterDotted => 1.5,
+            NoteLength::HalfTriplet => 4.0 / 3.0,
+            NoteLength::Quarter => 1.0,
+            NoteLength::EighthDotted => 0.75,
+            NoteLength::QuarterTriplet => 2.0 / 3.0,
+            NoteLength::Eighth => 0.5,
+            NoteLength::SixteenthDotted => 0.375,
+            NoteLength::EighthTriplet => 1.0 / 3.0,
+            NoteLength::Sixteenth => 0.25,
+            NoteLength::SixteenthTriplet => 1.0 / 6.0,
+            NoteLength::ThirtySecond => 0.125,
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            NoteLength::FourBars => "4/1",
+            NoteLength::TwoBars => "2/1",
+            NoteLength::Bar => "1/1",
+            NoteLength::HalfDotted => "1/2.",
+            NoteLength::Half => "1/2",
+            NoteLength::QuarterDotted => "1/4.",
+            NoteLength::HalfTriplet => "1/2T",
+            NoteLength::Quarter => "1/4",
+            NoteLength::EighthDotted => "1/8.",
+            NoteLength::QuarterTriplet => "1/4T",
+            NoteLength::Eighth => "1/8",
+            NoteLength::SixteenthDotted => "1/16.",
+            NoteLength::EighthTriplet => "1/8T",
+            NoteLength::Sixteenth => "1/16",
+            NoteLength::SixteenthTriplet => "1/16T",
+            NoteLength::ThirtySecond => "1/32",
+        }
+    }
+
+    /// Position in [`NoteLength::ALL`].
+    pub fn index(self) -> usize {
+        Self::ALL.iter().position(|&n| n == self).unwrap_or(7)
+    }
+
+    /// Seconds at `bpm`.
+    pub fn seconds(self, bpm: f32) -> f32 {
+        self.beats() * 60.0 / bpm.max(1.0)
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize), serde(default))]
 pub struct LfoParams {
@@ -78,11 +216,16 @@ pub struct LfoParams {
     pub cutoff: f32,
     /// Tremolo depth, 0..1.
     pub amp: f32,
+    /// Rate locked to the tempo: one cycle per `division`. Missing in older presets.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub sync: bool,
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub division: NoteLength,
 }
 
 impl Default for LfoParams {
     fn default() -> Self {
-        Self { wave: LfoWave::Sine, rate: 5.0, pitch: 0.0, cutoff: 0.0, amp: 0.0 }
+        Self { wave: LfoWave::Sine, rate: 5.0, pitch: 0.0, cutoff: 0.0, amp: 0.0, sync: false, division: NoteLength::Quarter }
     }
 }
 
@@ -134,11 +277,16 @@ pub struct DelayParams {
     pub ping_pong: bool,
     /// Level of the echoes, 0..1.
     pub mix: f32,
+    /// Time locked to the tempo: one `division` between repeats. Missing in older presets.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub sync: bool,
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub division: NoteLength,
 }
 
 impl Default for DelayParams {
     fn default() -> Self {
-        Self { on: false, time_ms: 375.0, feedback: 0.35, tone: 5000.0, ping_pong: true, mix: 0.3 }
+        Self { on: false, time_ms: 375.0, feedback: 0.35, tone: 5000.0, ping_pong: true, mix: 0.3, sync: false, division: NoteLength::EighthDotted }
     }
 }
 
@@ -229,6 +377,8 @@ pub struct EffectsParams {
 pub struct Patch {
     pub osc: [OscParams; 2],
     pub filter: FilterParams,
+    /// Second filter, off unless routed.
+    pub filter2: Filter2Params,
     pub filter_env: AdsrParams,
     pub amp_env: AdsrParams,
     pub lfo: LfoParams,
@@ -260,6 +410,7 @@ impl Default for Patch {
                 OscParams { wave: Waveform::Saw, fine: 7.0, level: 0.6, ..OscParams::default() },
             ],
             filter: FilterParams { mode: FilterMode::Lp24, cutoff: 800.0, resonance: 0.3, env_amount: 0.4, key_track: 0.5, drive: 0.0 },
+            filter2: Filter2Params::default(),
             filter_env: AdsrParams { attack: 0.005, decay: 0.5, sustain: 0.3, release: 0.5 },
             amp_env: AdsrParams { attack: 0.005, decay: 0.3, sustain: 0.8, release: 0.4 },
             lfo: LfoParams::default(),

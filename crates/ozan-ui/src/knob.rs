@@ -3,7 +3,7 @@
 use std::f32::consts::PI;
 
 use egui::{self, Color32, Pos2, Rect, Sense, Stroke, Vec2};
-use ozan_core::{ArpMode, FilterMode, LfoWave, VoiceMode, Waveform};
+use ozan_core::{ArpMode, FilterMode, FilterRouting, LfoWave, VoiceMode, Waveform};
 
 use crate::i18n::{fill, s};
 use crate::learn;
@@ -368,6 +368,30 @@ pub fn voice_mode_selector(ui: &mut egui::Ui, mode: &mut VoiceMode) -> bool {
             VoiceMode::Poly => s().poly_hint,
             VoiceMode::Mono => s().mono_hint,
             VoiceMode::Legato => s().legato_hint,
+        },
+    )
+}
+
+pub fn routing_selector(ui: &mut egui::Ui, routing: &mut FilterRouting) -> bool {
+    fn label(r: FilterRouting) -> &'static str {
+        match r {
+            FilterRouting::Off => s().routing_off,
+            FilterRouting::Serial => s().routing_serial,
+            FilterRouting::Parallel => s().routing_parallel,
+        }
+    }
+    choice_row(
+        ui,
+        routing,
+        &FilterRouting::ALL,
+        Vec2::new(70.0, 24.0),
+        |p, r, m, c| {
+            p.text(r.center(), egui::Align2::CENTER_CENTER, label(m), egui::FontId::proportional(13.0), c);
+        },
+        |m| match m {
+            FilterRouting::Off => s().routing_off_hint,
+            FilterRouting::Serial => s().routing_serial_hint,
+            FilterRouting::Parallel => s().routing_parallel_hint,
         },
     )
 }

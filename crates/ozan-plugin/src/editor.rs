@@ -14,8 +14,8 @@ use ozan_ui::theme;
 
 use crate::{Meters, OzanParams};
 
-pub const WIDTH: u32 = 1660;
-pub const HEIGHT: u32 = 846;
+pub const WIDTH: u32 = 1700;
+pub const HEIGHT: u32 = 880;
 
 /// Per-window state: needle ballistics, scope buffer, the preset bar.
 #[derive(Default)]

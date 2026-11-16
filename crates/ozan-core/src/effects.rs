@@ -324,7 +324,7 @@ mod tests {
 
     #[test]
     fn delay_echoes_at_its_time_and_ping_pongs() {
-        let p = EffectsParams { delay: DelayParams { on: true, time_ms: 100.0, feedback: 0.5, tone: 20_000.0, ping_pong: true, mix: 1.0 }, ..Default::default() };
+        let p = EffectsParams { delay: DelayParams { on: true, time_ms: 100.0, feedback: 0.5, tone: 20_000.0, ping_pong: true, mix: 1.0, ..Default::default() }, ..Default::default() };
         let (mut fx, p) = settled(p);
         let (l, r) = run(&mut fx, &p, &impulse(30_000));
         let peak_at = |v: &[f32], from: usize, to: usize| (from..to).max_by(|&a, &b| v[a].abs().total_cmp(&v[b].abs())).unwrap();
@@ -359,7 +359,7 @@ mod tests {
     fn longest_reverb_with_loud_input_does_not_blow_up() {
         let p = EffectsParams {
             reverb: ReverbParams { on: true, size: 1.0, decay: 20.0, damping: 0.0, predelay_ms: 100.0, mix: 1.0 },
-            delay: DelayParams { on: true, time_ms: 7.0, feedback: 0.95, tone: 20_000.0, ping_pong: false, mix: 1.0 },
+            delay: DelayParams { on: true, time_ms: 7.0, feedback: 0.95, tone: 20_000.0, ping_pong: false, mix: 1.0, ..Default::default() },
             ..Default::default()
         };
         let (mut fx, p) = settled(p);
@@ -373,7 +373,7 @@ mod tests {
     fn offset_does_not_build_up_in_long_tails() {
         let p = EffectsParams {
             reverb: ReverbParams { on: true, size: 1.0, decay: 8.0, damping: 0.0, predelay_ms: 0.0, mix: 1.0 },
-            delay: DelayParams { on: true, time_ms: 50.0, feedback: 0.95, tone: 20_000.0, ping_pong: false, mix: 1.0 },
+            delay: DelayParams { on: true, time_ms: 50.0, feedback: 0.95, tone: 20_000.0, ping_pong: false, mix: 1.0, ..Default::default() },
             ..Default::default()
         };
         let (mut fx, p) = settled(p);
