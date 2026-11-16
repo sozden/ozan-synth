@@ -2,6 +2,7 @@
 //! knobs and meters, logo, translations, settings and the sound panel.
 
 pub mod dice;
+pub mod history;
 pub mod i18n;
 pub mod knob;
 pub mod lcd;

@@ -26,6 +26,7 @@ struct Window {
     vu: f32,
     peak: f32,
     scope: Vec<f32>,
+    history: ozan_ui::history::History,
 }
 
 pub fn create(params: Arc<OzanParams>, meters: Arc<Meters>, bank: Arc<WavetableBank>) -> Option<Box<dyn Editor>> {
@@ -46,6 +47,14 @@ pub fn create(params: Arc<OzanParams>, meters: Arc<Meters>, bank: Arc<WavetableB
             window.peak = peak.max(window.peak * 0.85);
             window.vu += (peak - window.vu) * 0.12;
 
+            let current = params.patch.read().map(|p| *p).ok();
+            if let Some(mut patch) = current {
+                if window.history.shortcuts(ctx, &mut patch) {
+                    if let Ok(mut p) = params.patch.write() {
+                        *p = patch;
+                    }
+                }
+            }
             ozan_ui::wood_cheeks(ctx);
             egui::TopBottomPanel::top("header").frame(ozan_ui::pad()).show(ctx, |ui| header(ui, &params, setter, window, Meters::load(&meters.voices) as u32, &bank));
             if let Ok(patch) = params.patch.read().map(|p| *p) {
@@ -76,6 +85,10 @@ pub fn create(params: Arc<OzanParams>, meters: Arc<Meters>, bank: Arc<WavetableB
                     }
                 });
             });
+            let current = params.patch.read().map(|p| *p).ok();
+            if let Some(patch) = current {
+                window.history.track(ctx, &patch);
+            }
             ctx.request_repaint();
         },
     )
@@ -112,7 +125,7 @@ fn header(ui: &mut egui::Ui, params: &OzanParams, setter: &ParamSetter, window: 
                 window.seen_param = Some(i as i32);
             }
         }
-        if ozan_ui::dice::button(ui, &mut patch, bank) {
+        if ozan_ui::dice::button(ui, &mut patch, bank) | window.history.buttons(ui, &mut patch) {
             if let Ok(mut p) = params.patch.write() {
                 *p = patch;
             }

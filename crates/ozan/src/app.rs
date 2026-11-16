@@ -49,6 +49,9 @@ pub struct OzanApp {
     midi_glow: f32,
 
     patch: Patch,
+    /// Patch last sent to the engine.
+    sent: Patch,
+    history: ozan_ui::history::History,
     /// Scope samples, refilled each frame.
     scope: Vec<f32>,
     /// Wavetables shared with the engine, here for drawing.
@@ -90,6 +93,8 @@ impl OzanApp {
             seen_messages: 0,
             midi_glow: 0.0,
             patch: Patch::default(),
+            sent: Patch::default(),
+            history: Default::default(),
             scope: Vec::with_capacity(ozan_ui::scope::LEN),
             bank,
             pc_octave: 4,
@@ -166,8 +171,10 @@ impl OzanApp {
                 })
                 .collect()
         });
+        // Ctrl with a letter is a shortcut, not a note.
+        let command = ctx.input(|i| i.modifiers.command);
         for (key, pressed, repeat) in keys {
-            if repeat {
+            if repeat || (pressed && command) {
                 continue;
             }
             match key {
@@ -213,6 +220,7 @@ impl OzanApp {
                 self.preset_loaded(i);
             }
             ozan_ui::dice::button(ui, &mut self.patch, &self.bank);
+            self.history.buttons(ui, &mut self.patch);
             bar_right = ui.min_rect().right();
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| match &self.audio {
                 Ok(a) => {
@@ -337,6 +345,7 @@ impl OzanApp {
 impl eframe::App for OzanApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         let ctx = ctx.clone();
+        self.history.shortcuts(&ctx, &mut self.patch);
         self.computer_keyboard(&ctx);
 
         if self.midi.is_none() && !self.midi_off && self.last_scan.elapsed() >= RESCAN {
@@ -366,7 +375,6 @@ impl eframe::App for OzanApp {
         egui::TopBottomPanel::bottom("keys").frame(ozan_ui::pad()).show(&ctx, |ui| self.keyboard(ui));
         egui::CentralPanel::default().frame(ozan_ui::pad()).show(&ctx, |ui| {
             egui::ScrollArea::vertical().auto_shrink(false).show(ui, |ui| {
-                let before = self.patch;
                 self.status.scope.snapshot(&mut self.scope);
                 let meters = Meters {
                     scope: &self.scope,
@@ -391,11 +399,15 @@ impl eframe::App for OzanApp {
                     self.settings.set("midi_map", &map);
                     self.saved_map = map;
                 }
-                if self.patch != before {
-                    self.events.send(Event::Patch(self.patch));
-                }
             });
         });
+
+        // Whatever changed the sound this frame (panel, dice, undo), the engine hears it.
+        self.history.track(&ctx, &self.patch);
+        if self.patch != self.sent {
+            self.events.send(Event::Patch(self.patch));
+            self.sent = self.patch;
+        }
 
         // Meter, LED and lit keys follow the audio thread.
         ctx.request_repaint_after(Duration::from_millis(16));
