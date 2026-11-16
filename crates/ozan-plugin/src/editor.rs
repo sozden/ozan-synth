@@ -47,7 +47,7 @@ pub fn create(params: Arc<OzanParams>, meters: Arc<Meters>, bank: Arc<WavetableB
             window.vu += (peak - window.vu) * 0.12;
 
             ozan_ui::wood_cheeks(ctx);
-            egui::TopBottomPanel::top("header").frame(ozan_ui::pad()).show(ctx, |ui| header(ui, &params, setter, window));
+            egui::TopBottomPanel::top("header").frame(ozan_ui::pad()).show(ctx, |ui| header(ui, &params, setter, window, Meters::load(&meters.voices) as u32));
             if let Ok(patch) = params.patch.read().map(|p| *p) {
                 window.bar.dialogs(ctx, &patch);
             }
@@ -86,7 +86,7 @@ fn set_preset(params: &OzanParams, setter: &ParamSetter, index: i32) {
     setter.end_set_parameter(&params.preset);
 }
 
-fn header(ui: &mut egui::Ui, params: &OzanParams, setter: &ParamSetter, window: &mut Window) {
+fn header(ui: &mut egui::Ui, params: &OzanParams, setter: &ParamSetter, window: &mut Window, voices: u32) {
     let th = theme::t();
     ui.horizontal(|ui| {
         ozan_ui::logo::lockup(ui, 22.0, th.text, th.accent, th.muted);
@@ -112,7 +112,7 @@ fn header(ui: &mut egui::Ui, params: &OzanParams, setter: &ParamSetter, window: 
             }
         }
         ui.add_space(24.0);
-        let idle = ozan_ui::lcd::idle_line(&patch, None, None);
+        let idle = ozan_ui::lcd::idle_line(&patch, Some(voices), None);
         ozan_ui::lcd::show(ui, egui::vec2(340.0, 46.0), &ozan_ui::lcd::preset_line(&window.bar, &patch), &idle);
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             let mut index = theme::current_index();

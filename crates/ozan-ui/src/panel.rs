@@ -128,20 +128,14 @@ pub fn panel(ui: &mut egui::Ui, p: &mut Patch, bank: &WavetableBank, m: &Meters)
             });
         });
         theme::section_box(ui, "output", s().output, Vec2::new(w[4], top), |ui| {
-            ui.add_space(32.0);
             ui.horizontal(|ui| {
-                Knob::keyed("volume", s().volume, &mut p.volume, 0.0, 1.0).default_value(0.7).format(percent).show(ui);
-                // The meter takes what the section has left, so a tight row still fits.
-                let vu = (ui.available_width() - 82.0).clamp(90.0, 140.0);
-                widgets::vu_meter(ui, m.vu, m.peak, Vec2::new(vu, 92.0));
                 ui.vertical(|ui| {
-                    ui.label(RichText::new(s().voices).size(11.0).color(theme::t().muted));
-                    ui.label(RichText::new(format!("{} / {}", m.voices, ozan_core::MAX_VOICES)).monospace().size(16.0));
-                    ui.add_space(8.0);
-                    if ui.button(s().init).on_hover_text(s().init_hint).clicked() {
-                        *p = Patch::default();
-                    }
+                    ui.add_space(14.0);
+                    Knob::keyed("volume", s().volume, &mut p.volume, 0.0, 1.0).default_value(0.7).format(percent).show(ui);
                 });
+                // The meter fills the rest of the section.
+                let width = (ui.available_width()).clamp(150.0, 230.0);
+                widgets::vu_meter(ui, m.vu, m.peak, Vec2::new(width, 110.0));
             });
         });
     });
@@ -166,7 +160,7 @@ pub fn panel(ui: &mut egui::Ui, p: &mut Patch, bank: &WavetableBank, m: &Meters)
     let lower = row(LOWER).max(left);
     match tab {
         Tab::Modulation => {
-            let w = widths(ui, &[250.0, 220.0, 370.0, 470.0]);
+            let w = widths(ui, &[250.0, 220.0, 370.0, 556.0]);
             ui.horizontal_top(|ui| {
                 theme::section_box(ui, "lfo", s().lfo, Vec2::new(w[0], lower), |ui| {
                     ui.horizontal(|ui| {
@@ -380,111 +374,200 @@ pub fn oscillator(ui: &mut egui::Ui, osc: &mut OscParams, semitones: bool, bank:
     });
 }
 
-/// Column widths of the matrix: slot number, source, arrow, destination, amount bar, amount.
-const MATRIX: [f32; 6] = [14.0, 116.0, 14.0, 132.0, 118.0, 40.0];
+/// Destinations in the order of the pin matrix columns, with their short codes.
+const DESTS: [(ModDest, &str); 13] = [
+    (ModDest::Pitch, "PIT"),
+    (ModDest::Osc1Pitch, "P1"),
+    (ModDest::Osc2Pitch, "P2"),
+    (ModDest::Osc1Level, "L1"),
+    (ModDest::Osc2Level, "L2"),
+    (ModDest::Osc1Position, "W1"),
+    (ModDest::Osc2Position, "W2"),
+    (ModDest::UnisonDetune, "DET"),
+    (ModDest::Cutoff, "CUT"),
+    (ModDest::Resonance, "RES"),
+    (ModDest::Drive, "DRV"),
+    (ModDest::Volume, "VOL"),
+    (ModDest::Pan, "PAN"),
+];
 
-/// Source, destination and amount for each matrix slot, as rows of small screens.
+/// Pin matrix cell size, the width of the source names and of the screen beside it.
+const CELL: Vec2 = Vec2::new(24.0, 16.0);
+const NAMES: f32 = 72.0;
+const HEAD: f32 = 16.0;
+const SCREEN: Vec2 = Vec2::new(150.0, 80.0);
+
+/// Colour of a pin carrying `amount`: the accent for positive, a cool blue for negative.
+fn pin_color(amount: f32) -> egui::Color32 {
+    let th = theme::t();
+    let base = if amount >= 0.0 { th.accent } else { egui::Color32::from_rgb(0x5b, 0x9b, 0xd0) };
+    base.gamma_multiply(0.35 + 0.65 * amount.abs().min(1.0))
+}
+
+/// The modulation matrix as a pin board, sources down the side and destinations
+/// across: click a hole to connect or disconnect, drag a pin up and down (Shift for
+/// fine) or use the mouse wheel to set its amount. The engine has as many
+/// connections as `slots`; the screen beside the board describes the pin under the
+/// mouse.
 pub fn mod_matrix(ui: &mut egui::Ui, slots: &mut [ozan_core::ModSlot]) {
     let th = theme::t();
-    ui.spacing_mut().item_spacing.y = 4.0;
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 6.0;
-        for (w, text) in [(MATRIX[0], ""), (MATRIX[1], s().source), (MATRIX[2], ""), (MATRIX[3], s().destination), (MATRIX[4] + 6.0 + MATRIX[5], s().amount)] {
-            let (r, _) = ui.allocate_exact_size(Vec2::new(w, 12.0), egui::Sense::hover());
-            ui.painter().text(r.left_center(), egui::Align2::LEFT_CENTER, text, egui::FontId::proportional(11.0), th.muted);
-        }
-    });
-    for (i, slot) in slots.iter_mut().enumerate() {
-        let active = slot.source != ModSource::Off;
-        ui.horizontal(|ui| {
-            ui.spacing_mut().item_spacing.x = 6.0;
-            let (r, _) = ui.allocate_exact_size(Vec2::new(MATRIX[0], 22.0), egui::Sense::hover());
-            ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, (i + 1).to_string(), egui::FontId::monospace(11.0), th.muted);
-            lcd_pick(ui, ("mod_src", i), MATRIX[1], true, &mut slot.source, &ModSource::ALL, i18n::source_name);
-            let (r, _) = ui.allocate_exact_size(Vec2::new(MATRIX[2], 22.0), egui::Sense::hover());
-            let c = if active { th.muted } else { th.track };
-            let (a, b) = (r.center() - Vec2::new(5.0, 0.0), r.center() + Vec2::new(5.0, 0.0));
-            ui.painter().line_segment([a, b], egui::Stroke::new(1.5, c));
-            ui.painter().line_segment([b, b + Vec2::new(-3.5, -3.5)], egui::Stroke::new(1.5, c));
-            ui.painter().line_segment([b, b + Vec2::new(-3.5, 3.5)], egui::Stroke::new(1.5, c));
-            lcd_pick(ui, ("mod_dst", i), MATRIX[3], active, &mut slot.dest, &ModDest::ALL, i18n::dest_name);
-            amount_bar(ui, active, &mut slot.amount);
-        });
-    }
-}
+    let sources = &ModSource::ALL[1..];
+    let size = Vec2::new(NAMES + CELL.x * DESTS.len() as f32, HEAD + CELL.y * sources.len() as f32);
+    ui.horizontal_top(|ui| {
+        let (rect, response) = ui.allocate_exact_size(size, egui::Sense::click_and_drag());
+        let id = response.id;
+        let grid = egui::Rect::from_min_size(rect.min + Vec2::new(NAMES, HEAD), Vec2::new(CELL.x * DESTS.len() as f32, CELL.y * sources.len() as f32));
+        let cell_at = |pos: egui::Pos2| -> Option<(usize, usize)> {
+            if !grid.contains(pos) {
+                return None;
+            }
+            let c = ((pos.x - grid.left()) / CELL.x) as usize;
+            let r = ((pos.y - grid.top()) / CELL.y) as usize;
+            (r < sources.len() && c < DESTS.len()).then_some((r, c))
+        };
+        let center = |r: usize, c: usize| grid.min + Vec2::new((c as f32 + 0.5) * CELL.x, (r as f32 + 0.5) * CELL.y);
+        let find = |slots: &[ozan_core::ModSlot], r: usize, c: usize| slots.iter().position(|s| s.source == sources[r] && s.dest == DESTS[c].0);
 
-/// A choice shown on a small screen; a click opens the list.
-fn lcd_pick<T: Copy + PartialEq>(
-    ui: &mut egui::Ui,
-    id: impl std::hash::Hash,
-    width: f32,
-    enabled: bool,
-    value: &mut T,
-    options: &[T],
-    name: fn(T) -> &'static str,
-) {
-    let th = theme::t();
-    let sense = if enabled { egui::Sense::click() } else { egui::Sense::hover() };
-    let (rect, response) = ui.allocate_exact_size(Vec2::new(width, 22.0), sense);
-    let popup = ui.make_persistent_id(id);
-    let painter = ui.painter_at(rect.expand(2.0));
-    crate::lcd::glass(&painter, rect);
-    let ink = if !enabled { th.lcd_ink.gamma_multiply(0.25) } else if response.hovered() { th.lcd_ink } else { th.lcd_ink.gamma_multiply(0.9) };
-    painter.text(rect.left_center() + Vec2::new(7.0, 0.0), egui::Align2::LEFT_CENTER, name(*value).to_uppercase(), egui::FontId::monospace(11.0), ink);
-    if enabled {
-        // A small down-pointing triangle.
-        let c = rect.right_center() - Vec2::new(10.0, 0.0);
-        let tri = vec![c + Vec2::new(-3.5, -2.0), c + Vec2::new(3.5, -2.0), c + Vec2::new(0.0, 2.5)];
-        painter.add(egui::Shape::convex_polygon(tri, ink.gamma_multiply(0.7), egui::Stroke::NONE));
-    }
-    if response.clicked() {
-        ui.memory_mut(|m| m.toggle_popup(popup));
-    }
-    egui::popup_below_widget(ui, popup, &response, egui::PopupCloseBehavior::CloseOnClick, |ui| {
-        ui.set_min_width(width);
-        for &option in options {
-            if ui.selectable_label(*value == option, name(option)).clicked() {
-                *value = option;
+        // The pin being dragged stays chosen even if the pointer leaves its hole.
+        let dragging: Option<(usize, usize)> = ui.data(|d| d.get_temp(id));
+        let hovered = dragging.or_else(|| response.hover_pos().and_then(cell_at));
+        let mut full = false;
+        let mut connect = |slots: &mut [ozan_core::ModSlot], r: usize, c: usize| -> Option<usize> {
+            if let Some(i) = find(slots, r, c) {
+                return Some(i);
+            }
+            let free = slots.iter().position(|s| s.source == ModSource::Off);
+            match free {
+                Some(i) => {
+                    slots[i] = ozan_core::ModSlot { source: sources[r], dest: DESTS[c].0, amount: 0.5 };
+                    Some(i)
+                }
+                None => {
+                    full = true;
+                    None
+                }
+            }
+        };
+        if response.drag_started() {
+            if let Some((r, c)) = response.interact_pointer_pos().and_then(cell_at) {
+                if connect(slots, r, c).is_some() {
+                    ui.data_mut(|d| d.insert_temp(id, (r, c)));
+                }
             }
         }
-    });
-}
-
-/// Bipolar amount, -1..1, as a segmented bar: drag sideways (Shift for fine),
-/// mouse wheel, double-click for zero.
-fn amount_bar(ui: &mut egui::Ui, enabled: bool, amount: &mut f32) {
-    let th = theme::t();
-    let sense = if enabled { egui::Sense::click_and_drag() } else { egui::Sense::hover() };
-    let (rect, response) = ui.allocate_exact_size(Vec2::new(MATRIX[4], 22.0), sense);
-    if response.dragged() {
-        let fine = ui.input(|i| i.modifiers.shift);
-        *amount = (*amount + response.drag_delta().x / if fine { 400.0 } else { MATRIX[4] / 2.0 }).clamp(-1.0, 1.0);
-    }
-    if response.hovered() && enabled {
-        let scroll = ui.input(|i| i.smooth_scroll_delta.y);
-        if scroll != 0.0 {
-            *amount = (*amount + scroll / 600.0).clamp(-1.0, 1.0);
+        if let Some((r, c)) = dragging {
+            if response.dragged() {
+                if let Some(i) = find(slots, r, c) {
+                    let fine = ui.input(|i| i.modifiers.shift);
+                    let a = &mut slots[i].amount;
+                    *a = (*a - response.drag_delta().y / if fine { 600.0 } else { 120.0 }).clamp(-1.0, 1.0);
+                }
+            } else {
+                ui.data_mut(|d| d.remove::<(usize, usize)>(id));
+            }
         }
-    }
-    if response.double_clicked() {
-        *amount = 0.0;
-    }
-    let painter = ui.painter_at(rect.expand(2.0));
-    crate::lcd::glass(&painter, rect);
-    let ink = if enabled { th.lcd_ink } else { th.lcd_ink.gamma_multiply(0.25) };
-    crate::lcd::bar_graph(&painter, rect.shrink2(Vec2::new(6.0, 6.5)), 0.5 + 0.5 * *amount, true, ink);
-    let (r, _) = ui.allocate_exact_size(Vec2::new(MATRIX[5], 22.0), egui::Sense::hover());
-    let active = response.hovered() || response.dragged();
-    ui.painter().text(
-        r.right_center(),
-        egui::Align2::RIGHT_CENTER,
-        format!("{:+.2}", *amount),
-        egui::FontId::monospace(11.0),
-        if !enabled { th.track } else if active { th.lcd_ink } else { th.muted },
-    );
-    if enabled {
-        response.on_hover_text(s().amount_hint);
-    }
+        if response.clicked() {
+            if let Some((r, c)) = response.interact_pointer_pos().and_then(cell_at) {
+                match find(slots, r, c) {
+                    Some(i) => slots[i] = ozan_core::ModSlot { source: ModSource::Off, ..slots[i] },
+                    None => {
+                        connect(slots, r, c);
+                    }
+                }
+            }
+        }
+        if let Some((r, c)) = hovered {
+            let scroll = ui.input(|i| i.smooth_scroll_delta.y);
+            if scroll != 0.0 {
+                if let Some(i) = find(slots, r, c) {
+                    slots[i].amount = (slots[i].amount + scroll / 600.0).clamp(-1.0, 1.0);
+                }
+            }
+        }
+
+        let painter = ui.painter_at(rect.expand(4.0));
+        // Cross-hair under the pointer.
+        if let Some((r, c)) = hovered {
+            let row = egui::Rect::from_min_size(egui::pos2(rect.left(), grid.top() + r as f32 * CELL.y), Vec2::new(rect.width(), CELL.y));
+            let col = egui::Rect::from_min_size(egui::pos2(grid.left() + c as f32 * CELL.x, rect.top()), Vec2::new(CELL.x, rect.height()));
+            painter.rect_filled(row, 2.0, egui::Color32::from_white_alpha(6));
+            painter.rect_filled(col, 2.0, egui::Color32::from_white_alpha(6));
+        }
+        for (c, (_, code)) in DESTS.iter().enumerate() {
+            let on = hovered.is_some_and(|h| h.1 == c);
+            painter.text(egui::pos2(grid.left() + (c as f32 + 0.5) * CELL.x, rect.top() + HEAD / 2.0 - 1.0), egui::Align2::CENTER_CENTER, *code, egui::FontId::monospace(10.0), if on { th.text } else { th.muted });
+        }
+        for (r, src) in sources.iter().enumerate() {
+            let on = hovered.is_some_and(|h| h.0 == r);
+            let y = grid.top() + (r as f32 + 0.5) * CELL.y;
+            painter.text(egui::pos2(rect.left(), y), egui::Align2::LEFT_CENTER, i18n::source_name(*src), egui::FontId::proportional(11.0), if on { th.text } else { th.muted });
+            // A thin bus line along each row, as on a patch panel.
+            painter.line_segment([egui::pos2(grid.left() + 4.0, y), egui::pos2(grid.right() - 4.0, y)], egui::Stroke::new(1.0, th.track.gamma_multiply(0.6)));
+        }
+        for r in 0..sources.len() {
+            for c in 0..DESTS.len() {
+                let p = center(r, c);
+                match find(slots, r, c) {
+                    Some(i) => {
+                        // A plugged pin: shadow, coloured head, glint.
+                        let amount = slots[i].amount;
+                        painter.circle_filled(p + Vec2::new(1.0, 1.5), 7.0, egui::Color32::from_black_alpha(110));
+                        painter.circle_filled(p, 6.8, pin_color(amount));
+                        painter.circle_stroke(p, 6.8, egui::Stroke::new(1.0, egui::Color32::from_black_alpha(80)));
+                        painter.circle_filled(p + Vec2::new(-2.2, -2.2), 2.0, egui::Color32::from_white_alpha(110));
+                    }
+                    None => {
+                        painter.circle_filled(p, 3.6, th.track);
+                        painter.circle_filled(p, 1.6, th.bg);
+                    }
+                }
+                if hovered == Some((r, c)) {
+                    painter.circle_stroke(p, 8.0, egui::Stroke::new(1.2, th.text));
+                }
+            }
+        }
+
+        // Screen describing the pin under the pointer.
+        ui.add_space(10.0);
+        ui.vertical(|ui| {
+            let (screen, _) = ui.allocate_exact_size(SCREEN, egui::Sense::hover());
+            let painter = ui.painter_at(screen.expand(2.0));
+            crate::lcd::glass(&painter, screen);
+            let ink = th.lcd_ink;
+            let at = |y: f32| egui::pos2(screen.left() + 8.0, screen.top() + y);
+            let used = slots.iter().filter(|s| s.source != ModSource::Off).count();
+            match hovered {
+                Some((r, c)) => {
+                    painter.text(at(8.0), egui::Align2::LEFT_TOP, i18n::source_name(sources[r]).to_uppercase(), egui::FontId::monospace(11.0), ink);
+                    painter.text(at(24.0), egui::Align2::LEFT_TOP, format!("→ {}", i18n::dest_name(DESTS[c].0).to_uppercase()), egui::FontId::monospace(11.0), ink);
+                    match find(slots, r, c) {
+                        Some(i) => {
+                            let a = slots[i].amount;
+                            let bar = egui::Rect::from_min_size(at(46.0), Vec2::new(screen.width() - 16.0, 8.0));
+                            crate::lcd::bar_graph(&painter, bar, 0.5 + 0.5 * a, true, ink);
+                            painter.text(at(60.0), egui::Align2::LEFT_TOP, format!("{:+.2}", a), egui::FontId::monospace(11.0), ink);
+                            crate::lcd::touch(&format!("{} → {}", i18n::source_name(sources[r]), i18n::dest_name(DESTS[c].0)), format!("{a:+.2}"), 0.5 + 0.5 * a, true, ui.input(|i| i.time));
+                        }
+                        None => {
+                            let text = if used == slots.len() { s().pins_full } else { s().pins_connect };
+                            painter.text(at(52.0), egui::Align2::LEFT_TOP, text.to_uppercase(), egui::FontId::monospace(10.0), ink.gamma_multiply(0.6));
+                        }
+                    }
+                }
+                None => {
+                    painter.text(at(8.0), egui::Align2::LEFT_TOP, s().mod_matrix.to_uppercase(), egui::FontId::monospace(11.0), ink);
+                    painter.text(at(26.0), egui::Align2::LEFT_TOP, i18n::fill(s().pins_used, &[&used, &slots.len()]), egui::FontId::monospace(11.0), ink.gamma_multiply(0.8));
+                    let bar = egui::Rect::from_min_size(at(48.0), Vec2::new(screen.width() - 16.0, 8.0));
+                    crate::lcd::bar_graph(&painter, bar, used as f32 / slots.len() as f32, false, ink);
+                }
+            }
+            ui.add_space(4.0);
+            ui.label(RichText::new(s().pins_hint).size(10.5).color(th.muted));
+        });
+        if full {
+            response.on_hover_text(s().pins_full);
+        }
+    });
 }
 
 fn count(v: f32) -> String {
