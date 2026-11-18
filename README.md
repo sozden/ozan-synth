@@ -10,7 +10,22 @@ The logo is drawn from geometry in `assets/make_logo.py`: the Z is a saw tooth, 
 
 *Türkçe açıklama aşağıda.*
 
-## Status — stage 5 + play modes
+<p align="center"><img src="assets/screenshots/studio.png" alt="OZAN Synth, Studio look" width="900"></p>
+<p align="center"><img src="assets/screenshots/night.png" alt="OZAN Synth, Night look, with the step sequencer" width="900"></p>
+
+## Download
+
+**Windows 10/11 (64-bit):** get `OZAN-Synth-<version>-Setup.exe` from
+[Releases](https://github.com/sozden/ozan-synth/releases). It installs the standalone
+program (Start menu), the **VST3** plugin (`C:\Program Files\Common Files\VST3`) and the
+**CLAP** plugin (`C:\Program Files\Common Files\CLAP`); each can be left out. Your own
+presets and settings (`%APPDATA%\Ozan`) stay when you uninstall.
+
+The installer is not code-signed, so Windows SmartScreen may say it is from an unknown
+publisher: choose **More info → Run anyway**. Tested in Waveform Free 14; any host that
+loads VST3 or CLAP instruments should work.
+
+## Features
 
 - Classic subtractive voice: 2 oscillators → resonant filter → amplifier, 16 voices, stereo output
 - Band-limited sine, saw, square and triangle (PolyBLEP / PolyBLAMP — no aliasing whine on high notes)
@@ -56,6 +71,18 @@ cargo run --release -p ozan
 Needs Rust 1.85 or newer. On Windows, a MIDI input can be used by one program at a
 time — close your DAW (or let it release the keyboard) before connecting here.
 
+The installer is built with [Inno Setup 6](https://jrsoftware.org/isinfo.php)
+(`winget install JRSoftware.InnoSetup`):
+
+```
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\installer.ps1
+```
+
+builds the program and the plugins, checks the plugin, and writes
+`dist\OZAN-Synth-<version>-Setup.exe` (script: `installer\ozan.iss`). The program's icon
+and version details are put into `ozan.exe` by `crates/ozan/build.rs` with the Windows
+SDK's `rc.exe`.
+
 ## Plugin (CLAP / VST3)
 
 ```
@@ -80,9 +107,8 @@ pinned to a reviewed commit.
 
 | Crate | What it holds |
 |---|---|
-| `crates/ozan-core` | Sound engine: oscillators, filter, envelopes, LFO, voices, MIDI parsing, factory presets. No required dependencies (`serde` optional), no allocation while rendering — meant to run later inside a plugin too. |
+| `crates/ozan-core` | Sound engine: oscillators, filters, envelopes, LFOs, voices, arpeggiator and sequencer, effects, MIDI parsing, factory presets, the dice. No required dependencies (`serde` optional), no allocation while rendering. |
 | `crates/ozan` | Standalone program: sound card (`cpal`), MIDI (`midir`), panel (`egui`). |
-
 | `crates/ozan-ui` | Interface shared by the program and the plugin (egui 0.31): theme, knobs, meters, logo, translations, settings, the sound panel. |
 | `crates/ozan-plugin` | CLAP and VST3 instrument through nih-plug and nih_plug_egui: the panel in the plugin window, preset selector and relative macro parameters. |
 | `crates/ozan-lab` | Listening lab (not shipped): renders every preset to WAV with spectrograms and measurements, records the real output via WASAPI loopback. |
@@ -109,6 +135,10 @@ offset, the level after all notes end, and a click score at every note start/end
 4. ~~Effects: chorus, delay, reverb~~ → done
 5. ~~Wavetable oscillator, unison, modulation matrix~~ → done
 6. ~~VST3/CLAP plugin with `nih-plug`~~ → done, with the full panel as the plugin window
+7. ~~1.0: second filter, tempo sync, FM and ring, step sequencer, distortion, phaser and EQ, preset browser, undo, dice, installer~~ → done (see [CHANGELOG](CHANGELOG.md))
+
+Ideas for later: per-step probability and pattern memory in the sequencer, velocity
+curves, MIDI learn inside the plugin, macOS and Linux builds.
 
 ---
 
@@ -118,7 +148,13 @@ OZAN Synth, Rust ile yazılmış, adım adım büyütülen açık kaynak bir yaz
 Adı, sazıyla diyar diyar gezen halk şairinden geliyor.
 USB MIDI klavye, bilgisayar klavyesi ya da fareyle çalınır.
 
-**Şu an (5. aşama):** 16 sesli, iki osilatörlü klasik synth. Aliasing'siz sinüs, testere,
+**İndirme (Windows 10/11, 64 bit):** [Releases](https://github.com/sozden/ozan-synth/releases)
+sayfasından `OZAN-Synth-<sürüm>-Setup.exe` dosyasını indir. Kurulum bağımsız programı,
+**VST3** ve **CLAP** eklentilerini kurar (her biri seçilebilir); kaldırınca kendi
+preset'lerin ve ayarların (`%APPDATA%\Ozan`) silinmez. Kurulum dosyası imzalı olmadığı
+için Windows SmartScreen uyarı verebilir: **Ek bilgi → Yine de çalıştır**.
+
+**Özellikler:** 16 sesli, iki osilatörlü klasik synth. Aliasing'siz sinüs, testere,
 kare ve üçgen dalgalar; rezonanslı filtre (LP12, LP24, BP, HP), filtre ve amfi için ayrı
 ADSR zarfları. LFO (vibrato, filtre, tremolo), mod tekeri ve aftertouch. Stereo chorus,
 delay (ping-pong) ve reverb efektleri. Wavetable osilatör (5 tablo), 7 kopyaya kadar unison
