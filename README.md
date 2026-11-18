@@ -140,6 +140,11 @@ offset, the level after all notes end, and a click score at every note start/end
 Ideas for later: per-step probability and pattern memory in the sequencer, velocity
 curves, MIDI learn inside the plugin, macOS and Linux builds.
 
+## Thanks
+
+Thanks to my dear friend **Doğan Coşku Arşiray**, who helped me so much in finding my way
+around synthesizers.
+
 ---
 
 ## Türkçe
@@ -169,6 +174,11 @@ başlıktaki **Language** menüsünden Türkçe seçilebilir.
 
 Windows'ta bir MIDI girişini aynı anda tek program kullanabilir; DAW açıksa klavyeyi
 bırakmasını sağlayın.
+
+## Teşekkürler
+
+Synth'lerle tanışmamda ve bu yolda bana çok yardımı dokunan sevgili arkadaşım
+**Doğan Coşku Arşiray**'a teşekkürler.
 
 ## License
 
